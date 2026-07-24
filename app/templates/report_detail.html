@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-heading compact-heading">
+  <div>
+    <a class="back" href="/reports">← 返回报告</a>
+    <p class="eyebrow">日志报告 #{{ report.id }}</p>
+    <h1>{{ report.original_name }}</h1>
+    <p>{{ report.created_at }} · {{ report.username }} 上传 · 读取 {{ report.file_count }} 个文件</p>
+  </div>
+  <div class="hero-actions">
+    {% if can_download_original %}<a class="button" href="/reports/{{ report.id }}/download">下载原始日志</a>{% endif %}
+    <a class="button primary" href="/reports/{{ report.id }}/export.html">导出 HTML 报告</a>
+    <span class="status large {{ report.status }}">{{ report.status == 'completed' and '已完成' or '失败' }}</span>
+  </div>
+</section>
+{% if report.status == 'completed' %}
+{% if analysis_summary.skill_warning %}<section class="notice error">{{ analysis_summary.skill_warning }}</section>{% endif %}
+<section class="analysis-layout">
+  <div class="stack">
+    <article class="panel glass">
+      <div class="panel-title"><div><p class="eyebrow">特征库结果</p><h2>已关联特征（{{ features|length }}）</h2></div></div>
+      {% for feature in features %}
+      <article class="matched-feature">
+        <div class="feature-meta"><span class="severity {{ feature.severity }}">{{ severity_label(feature.severity) }}</span><span class="relation">{{ feature.relation_type == 'automatic' and '自动命中' or '手动关联' }}</span>{% if feature.feature_version %}<span class="relation">规则 v{{ feature.feature_version }}</span>{% endif %}</div>
+        <h3><a href="/features/{{ feature.id }}">{{ feature.title }}</a></h3><p>{{ feature.symptom }}</p><p><strong>建议：</strong>{{ feature.solution }}</p>
+        {% for item in feature.evidence_items %}{% if item.found %}<pre>{{ item.found.file }}:{{ item.found.line }}&#10;{{ item.found.excerpt }}</pre>{% endif %}{% endfor %}
+      </article>
+      {% else %}<p class="empty">未命中已有特征。可手动关联，或将确认的问题沉淀为新特征。</p>{% endfor %}
+    </article>
+    <article class="panel glass">
+      <div class="panel-title"><div><p class="eyebrow">公司 BMC Skill</p><h2>结构化解析结论（{{ skill_findings|length }}）</h2></div>{% if analysis_summary.skill_name %}<span class="relation">{{ analysis_summary.skill_name }} {{ analysis_summary.skill_version }}</span>{% else %}<span class="relation">未配置</span>{% endif %}</div>
+      {% for finding in skill_findings %}
+      <article class="matched-feature">
+        <div class="feature-meta"><span class="severity {{ finding.severity }}">{{ severity_label(finding.severity) }}</span><span class="relation">{{ finding.rule_id }}</span></div>
+        <h3>{{ finding.title }}</h3>{% if finding.summary %}<p>{{ finding.summary }}</p>{% endif %}{% if finding.diagnosis %}<p><strong>诊断：</strong>{{ finding.diagnosis }}</p>{% endif %}{% if finding.solution %}<p><strong>建议：</strong>{{ finding.solution }}</p>{% endif %}
+        {% for evidence in finding.evidence_items %}<pre>{{ evidence.file }}:{{ evidence.line }}&#10;{{ evidence.excerpt }}</pre>{% endfor %}
+      </article>
+      {% else %}<p class="empty">本次未返回公司 BMC Skill 结论。未配置 Skill 时，平台仍会执行特征库分析。</p>{% endfor %}
+    </article>
+    {% if can_link_features %}<article class="panel glass">
+      <div class="panel-title"><div><p class="eyebrow">知识补充</p><h2>关联已有特征</h2></div></div>
+      <form class="inline-form" method="post" action="/reports/{{ report.id }}/features">{{ csrf_input(request) }}<select name="case_id">{% for feature in available_features %}<option value="{{ feature.id }}">[{{ severity_label(feature.severity) }}] {{ feature.title }}</option>{% endfor %}</select><button class="button">关联</button></form>
+    </article>{% endif %}
+  </div>
+  <aside class="panel glass ai-panel"><p class="eyebrow">流式 AI 分析</p><h2>维护建议生成器</h2><p>基于特征库结果和公司 BMC Skill 结论生成排查路径。模型密钥只从服务器环境变量读取。</p><button class="button primary" data-stream-url="/reports/{{ report.id }}/llm/stream" data-stream-target="report-ai-output">开始流式分析</button><div class="stream-output" id="report-ai-output">等待开始分析…</div></aside>
+</section>
+{% else %}<section class="notice error">该日志无法读取：{{ report.summary }}</section>{% endif %}
+{% include "stream_script.html" %}
+{% endblock %}

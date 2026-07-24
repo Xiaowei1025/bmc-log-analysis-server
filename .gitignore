@@ -1,0 +1,28 @@
+# Secrets and environment-specific configuration
+.env
+.env.*
+!.env.example
+
+# Runtime data: never publish internal logs, attachments, or local databases
+data/
+uploads/
+examples/
+*.sqlite
+*.sqlite3
+*.db
+
+# Local virtual environments and Python cache
+.venv/
+.venv*/
+__pycache__/
+*.py[cod]
+
+# Generated local deliverables and historical package archives
+deliverables/
+output/
+releases/
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/

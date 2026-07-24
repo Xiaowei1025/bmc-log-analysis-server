@@ -1,0 +1,21 @@
+[Unit]
+Description=BMC Operations Knowledge and Tools Hub
+After=network.target
+
+[Service]
+Type=simple
+User=bmc-hub
+WorkingDirectory=/opt/bmc-hub
+EnvironmentFile=/opt/bmc-hub/.env
+ExecStart=/opt/bmc-hub/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/opt/bmc-hub/data /opt/bmc-hub/uploads
+
+[Install]
+WantedBy=multi-user.target

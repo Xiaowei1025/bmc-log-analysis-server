@@ -1,0 +1,18 @@
+/* Selected navigation item: translucent, layered liquid-glass pill. */
+nav a{position:relative;isolation:isolate;transition:color .18s ease,background .22s ease,box-shadow .22s ease,transform .22s ease}
+nav a.active{color:var(--ink);font-weight:750;background:linear-gradient(135deg,rgba(255,255,255,.76),rgba(170,205,255,.36));border:1px solid rgba(255,255,255,.78);box-shadow:inset 0 1px 0 rgba(255,255,255,.94),0 11px 28px rgba(37,91,168,.24),0 3px 8px rgba(37,91,168,.12);backdrop-filter:blur(20px) saturate(1.18);-webkit-backdrop-filter:blur(20px) saturate(1.18);transform:translateY(-1px)}
+html[data-theme=dark] nav a.active{background:linear-gradient(135deg,rgba(151,190,255,.26),rgba(173,143,255,.24));border-color:rgba(185,213,255,.3);box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 12px 30px rgba(0,0,0,.34),0 4px 10px rgba(100,145,255,.14)}
+
+/* Markdown from the model is rendered locally after HTML escaping. */
+.stream-output{white-space:normal;line-height:1.68}
+.markdown-output{overflow-wrap:anywhere;line-height:1.68}
+.markdown-output>:first-child{margin-top:0}.markdown-output>:last-child{margin-bottom:0}
+.markdown-output h1,.markdown-output h2,.markdown-output h3,.markdown-output h4{line-height:1.35;margin:16px 0 8px;color:var(--ink)}
+.markdown-output h1{font-size:21px}.markdown-output h2{font-size:18px}.markdown-output h3{font-size:15px}.markdown-output h4{font-size:14px}
+.markdown-output p{margin:0 0 10px}.markdown-output ul,.markdown-output ol{margin:0 0 12px;padding-left:21px}.markdown-output li{margin:4px 0}
+.markdown-output strong{font-weight:760}.markdown-output code{padding:1px 5px;border-radius:5px;background:rgba(39,92,165,.12);font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink)}
+.markdown-output pre{margin:12px 0;padding:12px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:rgba(10,27,58,.09)}.markdown-output pre code{padding:0;background:transparent;white-space:pre;color:inherit}
+.markdown-output blockquote{margin:10px 0;padding:7px 11px;border-left:3px solid var(--blue);border-radius:0 8px 8px 0;background:rgba(38,116,223,.08);color:var(--muted)}
+.markdown-output hr{border:0;border-top:1px solid var(--line);margin:14px 0}.markdown-output a{color:var(--blue);text-decoration:underline;text-underline-offset:2px}
+.chat-bubble .message-text{margin:0;white-space:pre-wrap}.chat-bubble.assistant .markdown-output{font-size:14px}.chat-bubble.assistant .markdown-output p{margin-bottom:8px}
+.stream-output h1,.stream-output h2,.stream-output h3,.stream-output h4{line-height:1.35;margin:16px 0 8px;color:var(--ink)}.stream-output h1{font-size:21px}.stream-output h2{font-size:18px}.stream-output h3{font-size:15px}.stream-output h4{font-size:14px}.stream-output p{margin:0 0 10px}.stream-output ul,.stream-output ol{margin:0 0 12px;padding-left:21px}.stream-output li{margin:4px 0}.stream-output strong{font-weight:760}.stream-output code{padding:1px 5px;border-radius:5px;background:rgba(39,92,165,.12);font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink)}.stream-output pre{margin:12px 0;padding:12px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:rgba(10,27,58,.09)}.stream-output pre code{padding:0;background:transparent;white-space:pre;color:inherit}.stream-output blockquote{margin:10px 0;padding:7px 11px;border-left:3px solid var(--blue);border-radius:0 8px 8px 0;background:rgba(38,116,223,.08);color:var(--muted)}.stream-output hr{border:0;border-top:1px solid var(--line);margin:14px 0}.stream-output a{color:var(--blue);text-decoration:underline;text-underline-offset:2px}

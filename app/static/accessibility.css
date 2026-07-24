@@ -1,0 +1,40 @@
+/* Shared contrast rules for placeholders and supporting copy. */
+:root {
+  --placeholder: #59677e;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--placeholder);
+  opacity: 1;
+}
+
+html[data-theme=dark] {
+  --muted: #bac6d8;
+  --placeholder: #c9d5e8;
+}
+
+html[data-theme=dark] input:not([type=checkbox]):not([type=radio]),
+html[data-theme=dark] textarea,
+html[data-theme=dark] select {
+  background-color: rgba(7, 18, 35, .7);
+  border-color: rgba(195, 214, 239, .25);
+  color: var(--ink);
+}
+
+html[data-theme=dark] option {
+  background: #1a2740;
+  color: var(--ink);
+}
+
+html[data-theme=dark] input:focus,
+html[data-theme=dark] textarea:focus,
+html[data-theme=dark] select:focus {
+  border-color: rgba(137, 183, 255, .8);
+  box-shadow: 0 0 0 3px rgba(90, 146, 255, .2);
+}
+
+html[data-theme=dark] .chat-bubble.assistant small {
+  color: var(--muted);
+  opacity: .9;
+}

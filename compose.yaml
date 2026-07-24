@@ -1,0 +1,16 @@
+services:
+  bmc-hub:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      APP_SECRET: ${APP_SECRET:?set APP_SECRET in .env}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-200}
+      BMC_SKILL_ADAPTER: ${BMC_SKILL_ADAPTER:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4.1-mini}
+    volumes:
+      - ./data:/srv/bmc-hub/data
+      - ./uploads:/srv/bmc-hub/uploads
+    restart: unless-stopped

@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-heading compact-heading"><div><a class="back" href="/cases">← 返回案例库</a><p class="eyebrow">发布案例</p><h1>沉淀一篇可复用的维护案例</h1><p>可用富文本快速编写、切换到 Markdown，或先导入既有文档再校对发布。</p></div><a class="button" href="/cases/import">一键导入案例</a></section>
+{% if imported_document %}<section class="case-import-ready panel glass"><div><p class="eyebrow">已导入待发布草稿</p><h2>{{ imported_document.original_name }}</h2><p>{{ imported_document.extraction_note }} 已提取 {{ imported_document.extracted_characters }} 个字符；请检查标题、摘要与正文，再发布为正式案例。</p></div><div class="case-import-ready-actions"><a class="button" href="/cases/imports/{{ imported_document.id }}/download">查看原文件</a><form method="post" action="/cases/imports/{{ imported_document.id }}/discard"><button class="text-button" type="submit">取消本次导入</button></form></div></section>{% endif %}
+<form id="knowledge-case-form" class="editor-form glass" method="post" action="/cases" enctype="multipart/form-data">{% if imported_document %}<input type="hidden" name="import_id" value="{{ imported_document.id }}">{% endif %}<div class="form-grid"><label class="span-2">案例标题<input name="title" required value="{{ knowledge_case.title if knowledge_case else '' }}" placeholder="例如：R220KV2 风扇 3 低转速故障排查"></label><label class="span-2">摘要（可选）<input name="summary" value="{{ knowledge_case.summary if knowledge_case else '' }}" placeholder="一句话说明故障现象、机型或适用条件"></label><section class="span-2 case-editor-block" aria-labelledby="case-body-label"><div class="case-editor-head"><div><strong id="case-body-label">案例正文（可选）</strong><small id="case-editor-hint">使用富文本直接排版；内容会安全保存为 Markdown，便于后续检索与问答。</small></div><div class="case-editor-actions"><div class="editor-mode-switch" role="group" aria-label="正文输入方式"><button type="button" class="is-active" data-editor-mode="rich" aria-pressed="true">富文本</button><button type="button" data-editor-mode="markdown" aria-pressed="false">Markdown</button></div><button type="button" id="case-preview-button" class="editor-action">实时预览</button><button type="button" id="markdown-syntax-button" class="editor-action" hidden>语法说明</button></div></div><div id="case-rich-toolbar" class="rich-toolbar" aria-label="正文格式工具栏"><button type="button" data-editor-command="heading" title="二级标题">标题</button><button type="button" data-editor-command="bold" title="加粗（Markdown：⌘/Ctrl+B）">粗体</button><button type="button" data-editor-command="italic" title="强调">斜体</button><button type="button" data-editor-command="unordered" title="无序列表">列表</button><button type="button" data-editor-command="ordered" title="有序列表">编号</button><button type="button" data-editor-command="quote" title="引用">引用</button><button type="button" data-editor-command="code" title="代码块">代码</button><button type="button" data-editor-command="clear" data-rich-only title="清除所选文本的格式">清除格式</button></div><textarea id="case-markdown-input" name="body" class="case-markdown-input" placeholder="">{{ knowledge_case.body if knowledge_case else '' }}</textarea><div id="case-rich-editor" class="case-rich-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="富文本案例正文" data-placeholder="可直接输入案例内容；用上方工具栏添加标题、列表、引用或代码。" hidden></div><article id="case-preview" class="case-preview panel" hidden><div class="case-preview-head"><strong>发布前预览</strong><small>按当前输入方式安全渲染</small></div><div id="case-preview-content" class="markdown-output"></div></article></section><label class="span-2 source-upload">关联日志（可选，可多选）<input type="file" name="bundles" multiple accept=".tar,.gz,.tgz,.zip,.log,.txt"><small>每份日志将生成独立分析报告，并自动关联到本案例。</small></label></div><p class="hint">请至少填写案例正文或上传一份日志。正文将安全地渲染，并作为智能问答的内部知识来源。</p><button class="button primary">发布案例</button></form>
+<dialog id="markdown-syntax-dialog" class="case-editor-dialog glass"><div class="dialog-head"><div><p class="eyebrow">Markdown 快速说明</p><h2>常用语法</h2></div><button class="icon-button" type="button" id="markdown-syntax-close" aria-label="关闭">×</button></div><div class="syntax-grid"><code># 一级标题</code><code>## 二级标题</code><code>**加粗文字**</code><code>*强调文字*</code><code>- 无序列表</code><code>1. 有序列表</code><code>&gt; 重要提示或引用</code><code>&#96;命令或关键字&#96;</code><code>&#96;&#96;&#96;<br>多行代码<br>&#96;&#96;&#96;</code><code>[链接文字](https://example.com)</code></div><p class="hint">平台会安全渲染上述语法。建议使用标题、列表和代码块，让日志证据与处理步骤更易阅读和检索。</p></dialog>
+<script>
+(() => {
+  const form = document.getElementById('knowledge-case-form');
+  const markdown = document.getElementById('case-markdown-input');
+  const rich = document.getElementById('case-rich-editor');
+  markdown.placeholder = ['# 现象', '', '## 环境', '- 机型：', '- BMC 版本：', '', '## 日志证据', '', '## 排查过程', '', '## 根因与处理', '', '## 复盘建议'].join(String.fromCharCode(10));
+  const toolbar = document.getElementById('case-rich-toolbar');
+  const hint = document.getElementById('case-editor-hint');
+  const preview = document.getElementById('case-preview');
+  const previewContent = document.getElementById('case-preview-content');
+  const previewButton = document.getElementById('case-preview-button');
+  const syntaxButton = document.getElementById('markdown-syntax-button');
+  const syntaxDialog = document.getElementById('markdown-syntax-dialog');
+  const newline = String.fromCharCode(10);
+  const fence = String.fromCharCode(96).repeat(3);
+  let mode = 'markdown';
+  let richRange = null;
+  let markdownRange = {start: 0, end: 0};
+
+  const normalize = value => String(value || '').replace(/\u00a0/g, ' ');
+  const inlineMarkdown = node => {
+    if (node.nodeType === Node.TEXT_NODE) return normalize(node.nodeValue);
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    const content = Array.from(node.childNodes).map(inlineMarkdown).join('');
+    if (node.tagName === 'BR') return newline;
+    if (node.tagName === 'STRONG' || node.tagName === 'B') return '**' + content + '**';
+    if (node.tagName === 'EM' || node.tagName === 'I') return '*' + content + '*';
+    if (node.tagName === 'CODE') return String.fromCharCode(96) + content + String.fromCharCode(96);
+    if (node.tagName === 'A') {
+      const href = node.getAttribute('href') || '';
+      return /^https?:\/\//i.test(href) ? '[' + content + '](' + href + ')' : content;
+    }
+    return content;
+  };
+  const blockMarkdown = node => {
+    if (node.nodeType === Node.TEXT_NODE) return normalize(node.nodeValue);
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    const tag = node.tagName;
+    const inline = inlineMarkdown(node).trim();
+    if (/^H[1-6]$/.test(tag)) return '#'.repeat(Number(tag[1])) + ' ' + inline + newline + newline;
+    if (tag === 'P' || tag === 'DIV') return inline ? inline + newline + newline : '';
+    if (tag === 'UL' || tag === 'OL') return Array.from(node.children).map((item, index) => (tag === 'OL' ? String(index + 1) + '.' : '-') + ' ' + inlineMarkdown(item).trim().replace(/\n+/g, ' ')).join(newline) + newline + newline;
+    if (tag === 'BLOCKQUOTE') return inline.split(newline).map(line => '> ' + line).join(newline) + newline + newline;
+    if (tag === 'PRE') return fence + newline + normalize(node.textContent).trim() + newline + fence + newline + newline;
+    return inline ? inline + newline + newline : '';
+  };
+  const richToMarkdown = () => Array.from(rich.childNodes).map(blockMarkdown).join('').replace(/\n{3,}/g, newline + newline).trim();
+  const currentMarkdown = () => mode === 'rich' ? richToMarkdown() : markdown.value.trim();
+  const updatePreview = () => window.BmcMarkdown.renderTo(previewContent, currentMarkdown() || '尚未填写案例正文。');
+  const refreshPreview = () => { if (!preview.hidden) updatePreview(); };
+  const cacheMarkdownRange = () => {
+    markdownRange = {start: markdown.selectionStart || 0, end: markdown.selectionEnd || 0};
+  };
+  const focusMarkdown = () => {
+    try { markdown.focus({preventScroll: true}); } catch (error) { markdown.focus(); }
+    const start = Math.max(0, Math.min(markdownRange.start, markdown.value.length));
+    const end = Math.max(start, Math.min(markdownRange.end, markdown.value.length));
+    markdown.setSelectionRange(start, end);
+  };
+  const replaceMarkdown = (start, end, value, selectedStart, selectedEnd) => {
+    markdown.focus();
+    markdown.setRangeText(value, start, end, 'select');
+    markdown.setSelectionRange(selectedStart, selectedEnd);
+    cacheMarkdownRange();
+    refreshPreview();
+  };
+  const wrapMarkdown = (prefix, suffix, emptyText) => {
+    focusMarkdown();
+    const start = markdown.selectionStart;
+    const end = markdown.selectionEnd;
+    const value = markdown.value;
+    const selected = value.slice(start, end);
+    const alreadyWrapped = start >= prefix.length && value.slice(start - prefix.length, start) === prefix && value.slice(end, end + suffix.length) === suffix;
+    if (selected && alreadyWrapped) {
+      replaceMarkdown(start - prefix.length, end + suffix.length, selected, start - prefix.length, end - prefix.length);
+      return;
+    }
+    if (selected) {
+      replaceMarkdown(start, end, prefix + selected + suffix, start + prefix.length, end + prefix.length);
+      return;
+    }
+    replaceMarkdown(start, end, prefix + emptyText + suffix, start + prefix.length, start + prefix.length + emptyText.length);
+  };
+  const prefixMarkdownLines = prefix => {
+    focusMarkdown();
+    const value = markdown.value;
+    const start = markdown.selectionStart;
+    const end = markdown.selectionEnd;
+    const lineStart = value.lastIndexOf(newline, Math.max(0, start - 1)) + 1;
+    const nextBreak = value.indexOf(newline, end);
+    const lineEnd = nextBreak === -1 ? value.length : nextBreak;
+    const lines = value.slice(lineStart, lineEnd).split(newline);
+    const nonEmpty = lines.filter(line => line.trim());
+    const removePrefix = nonEmpty.length > 0 && nonEmpty.every(line => line.startsWith(prefix));
+    const changed = lines.map(line => {
+      if (!line.trim()) return line;
+      return removePrefix ? line.slice(prefix.length) : prefix + line;
+    }).join(newline);
+    const offset = removePrefix ? -prefix.length : prefix.length;
+    replaceMarkdown(lineStart, lineEnd, changed, Math.max(lineStart, start + offset), Math.max(lineStart, end + offset));
+  };
+  const applyMarkdownCommand = command => {
+    if (command === 'bold') wrapMarkdown('**', '**', '加粗文字');
+    else if (command === 'italic') wrapMarkdown('*', '*', '强调文字');
+    else if (command === 'code') wrapMarkdown(fence + newline, newline + fence, '代码内容');
+    else if (command === 'heading') prefixMarkdownLines('## ');
+    else if (command === 'unordered') prefixMarkdownLines('- ');
+    else if (command === 'ordered') prefixMarkdownLines('1. ');
+    else if (command === 'quote') prefixMarkdownLines('> ');
+  };
+  const cacheRichSelection = () => {
+    if (mode !== 'rich') return;
+    const selection = window.getSelection();
+    if (!selection || !selection.rangeCount) return;
+    const range = selection.getRangeAt(0);
+    if (rich.contains(range.commonAncestorContainer)) richRange = range.cloneRange();
+  };
+  const restoreRichSelection = () => {
+    try { rich.focus({preventScroll: true}); } catch (error) { rich.focus(); }
+    if (!richRange) return;
+    const selection = window.getSelection();
+    if (!selection || !rich.contains(richRange.commonAncestorContainer)) return;
+    selection.removeAllRanges();
+    selection.addRange(richRange);
+  };
+  const fallbackWrapRichSelection = tagName => {
+    const selection = window.getSelection();
+    if (!selection || !selection.rangeCount) return false;
+    const range = selection.getRangeAt(0);
+    if (range.collapsed || !rich.contains(range.commonAncestorContainer)) return false;
+    const wrapper = document.createElement(tagName);
+    wrapper.appendChild(range.extractContents());
+    range.insertNode(wrapper);
+    const nextRange = document.createRange();
+    nextRange.selectNodeContents(wrapper);
+    selection.removeAllRanges();
+    selection.addRange(nextRange);
+    richRange = nextRange.cloneRange();
+    return true;
+  };
+  const applyRichCommand = command => {
+    restoreRichSelection();
+    const execute = (name, value) => typeof document.execCommand === 'function' && document.execCommand(name, false, value);
+    let applied = false;
+    if (command === 'heading') applied = execute('formatBlock', 'h2');
+    else if (command === 'quote') applied = execute('formatBlock', 'blockquote');
+    else if (command === 'code') applied = execute('formatBlock', 'pre');
+    else if (command === 'unordered') applied = execute('insertUnorderedList');
+    else if (command === 'ordered') applied = execute('insertOrderedList');
+    else if (command === 'clear') { applied = execute('removeFormat'); execute('formatBlock', 'p'); }
+    else if (command === 'bold') applied = execute('bold');
+    else if (command === 'italic') applied = execute('italic');
+    if (!applied && command === 'bold') fallbackWrapRichSelection('strong');
+    if (!applied && command === 'italic') fallbackWrapRichSelection('em');
+    cacheRichSelection();
+    refreshPreview();
+  };
+  const updateToolbar = () => {
+    toolbar.dataset.mode = mode;
+    toolbar.hidden = false;
+    toolbar.querySelectorAll('[data-rich-only]').forEach(button => { button.hidden = mode !== 'rich'; });
+  };
+  const setMode = nextMode => {
+    if (nextMode === mode && !rich.hidden) return;
+    if (nextMode === 'rich') {
+      rich.innerHTML = markdown.value.trim() ? window.BmcMarkdown.render(markdown.value) : '';
+      rich.hidden = false;
+      markdown.hidden = true;
+      syntaxButton.hidden = true;
+      hint.textContent = '选中文本后可用上方工具栏格式化；常用快捷键如 ⌘/Ctrl+B 也可直接使用。';
+    } else {
+      markdown.value = richToMarkdown();
+      markdown.hidden = false;
+      rich.hidden = true;
+      syntaxButton.hidden = false;
+      hint.textContent = '可直接输入 Markdown；选中文本后可点上方工具栏，或按 ⌘/Ctrl+B 插入/取消加粗。';
+      cacheMarkdownRange();
+    }
+    mode = nextMode;
+    updateToolbar();
+    document.querySelectorAll('[data-editor-mode]').forEach(button => {
+      const active = button.dataset.editorMode === mode;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    refreshPreview();
+  };
+
+  ['select', 'keyup', 'click', 'focus', 'input'].forEach(name => markdown.addEventListener(name, cacheMarkdownRange));
+  markdown.addEventListener('keydown', event => {
+    if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'b') {
+      event.preventDefault();
+      cacheMarkdownRange();
+      applyMarkdownCommand('bold');
+    }
+  });
+  ['keyup', 'mouseup', 'focus', 'input'].forEach(name => rich.addEventListener(name, cacheRichSelection));
+  document.addEventListener('selectionchange', cacheRichSelection);
+  document.querySelectorAll('[data-editor-mode]').forEach(button => button.addEventListener('click', () => setMode(button.dataset.editorMode)));
+  previewButton.addEventListener('click', () => {
+    const visible = !preview.hidden;
+    preview.hidden = visible;
+    previewButton.textContent = visible ? '实时预览' : '收起预览';
+    if (!visible) updatePreview();
+  });
+  syntaxButton.addEventListener('click', () => syntaxDialog.showModal());
+  document.getElementById('markdown-syntax-close').addEventListener('click', () => syntaxDialog.close());
+  syntaxDialog.addEventListener('click', event => { if (event.target === syntaxDialog) syntaxDialog.close(); });
+  toolbar.addEventListener('mousedown', event => {
+    if (event.target.closest('[data-editor-command]')) event.preventDefault();
+  });
+  toolbar.addEventListener('click', event => {
+    const button = event.target.closest('[data-editor-command]');
+    if (!button) return;
+    if (mode === 'markdown') applyMarkdownCommand(button.dataset.editorCommand);
+    else applyRichCommand(button.dataset.editorCommand);
+  });
+  rich.addEventListener('paste', event => {
+    event.preventDefault();
+    document.execCommand('insertText', false, event.clipboardData.getData('text/plain'));
+  });
+  form.addEventListener('submit', () => { if (mode === 'rich') markdown.value = richToMarkdown(); });
+  cacheMarkdownRange();
+  setMode('rich');
+})();
+</script>
+{% endblock %}

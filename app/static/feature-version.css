@@ -1,0 +1,8 @@
+.notice.success {
+  background: rgba(39, 152, 108, .13);
+  color: #188052;
+}
+
+.hero-actions form {
+  margin: 0;
+}
