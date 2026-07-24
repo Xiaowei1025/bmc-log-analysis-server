@@ -5,6 +5,7 @@
 - 版本：`0.6.0-local`
 - 更新日期：2026-07-24
 - 当前阶段：本地调试完成，**尚未部署到服务器**。
+- GitHub 代码仓库（私有）：`https://github.com/Xiaowei1025/bmc-log-analysis-server`。仅推送可复现源码、测试、部署配置、Handoff 和文档生成素材；绝不推送 `.env`、`data/`、`uploads/`、公司日志样例或本地交付包。
 - 目标服务器：openEuler 24.03 `aarch64`、Python 3.10+。
 - 运行架构：FastAPI + SQLite + Nginx/systemd（生产）或 Uvicorn（本地）。
 
