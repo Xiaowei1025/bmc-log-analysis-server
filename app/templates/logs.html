@@ -1,1 +1,57 @@
-{% extends "base.html" %}{% block content %}<section class="page-heading"><div><p class="eyebrow">批量分析</p><h1>一次上传，多份独立报告</h1><p>支持 <code>tar.gz</code>、zip、tar、gz 以及单个文本日志。每个上传文件均单独解析并保留记录。</p></div><a class="button" href="/reports">查看历史报告</a></section><section class="upload-card glass"><form method="post" action="/logs/analyze" enctype="multipart/form-data">{{ csrf_input(request) }}<label class="drop-zone"><input type="file" name="bundles" multiple required accept=".tar,.gz,.tgz,.zip,.log,.txt"><span class="drop-icon">⇧</span><strong>选择一个或多个日志包</strong><small>单个文件最大 {{ 200 }} MB；只读取文本内容，不执行压缩包中的文件。</small></label><button class="button primary">开始批量分析</button></form></section>{% if results %}<section class="result-section"><div class="section-header"><div><p class="eyebrow">本次任务</p><h2>{{ results|length }} 份日志已处理</h2></div></div><div class="report-grid">{% for report in results %}<a class="report-card glass" href="/reports/{{ report.id }}"><div><span class="status {{ report.status }}">{{ report.status == 'completed' and '已完成' or '失败' }}</span><h3>{{ report.original_name }}</h3><p>{{ report.status == 'completed' and ('读取 ' ~ report.file_count ~ ' 个文件，命中 ' ~ report.match_count ~ ' 个特征') or report.error }}</p></div><span class="arrow">→</span></a>{% endfor %}</div></section>{% endif %}{% endblock %}
+{% extends "base.html" %}
+{% block content %}
+<section class="page-heading">
+  <div>
+    <p class="eyebrow">批量分析</p>
+    <h1>一次上传，多份独立报告</h1>
+    <p>先检查文件清单和大小，再统一上传分析；单个文件失败不会覆盖其他报告。</p>
+  </div>
+  <a class="button" href="/reports">查看历史报告</a>
+</section>
+
+<section class="upload-card glass">
+  <form id="log-upload-form" method="post" action="/logs/analyze" enctype="multipart/form-data" data-upload-form data-pending-label="正在上传并分析…">
+    {{ csrf_input(request) }}
+    <label class="drop-zone upload-drop-zone" for="log-bundles" tabindex="0">
+      <input class="file-input-hidden" id="log-bundles" type="file" name="bundles" multiple required accept=".tar,.gz,.tgz,.zip,.log,.txt" data-max-mb="200">
+      <span class="drop-icon" aria-hidden="true">⇧</span>
+      <strong>拖入日志包，或点击选择文件</strong>
+      <small>支持 tar.gz、tgz、zip、tar、gz、log、txt；单个文件最大 200 MB。</small>
+      <span class="button upload-picker" aria-hidden="true">选择日志文件</span>
+    </label>
+
+    <div class="upload-selection" id="upload-selection" hidden>
+      <div class="upload-selection-head">
+        <div><strong id="upload-selection-title">已选择文件</strong><small id="upload-selection-summary"></small></div>
+        <button class="text-button" id="upload-clear" type="button">全部清除</button>
+      </div>
+      <ul class="upload-file-list" id="upload-file-list" aria-live="polite"></ul>
+    </div>
+
+    <div class="upload-error" id="upload-error" role="alert" hidden></div>
+    <div class="upload-processing" id="upload-processing" role="status" aria-live="polite" hidden>
+      <div><strong>正在上传并逐份分析</strong><span id="upload-processing-copy">请保持当前页面打开。</span></div>
+      <div class="indeterminate-progress" aria-hidden="true"><span></span></div>
+    </div>
+
+    <div class="upload-submit-row">
+      <p>所选文件只在本服务器解析，不会在浏览器执行其中内容。</p>
+      <button class="button primary" id="upload-submit" type="submit" disabled>开始批量分析</button>
+    </div>
+  </form>
+</section>
+
+{% if results %}
+<section class="result-section">
+  <div class="section-header"><div><p class="eyebrow">本次任务</p><h2>{{ results|length }} 份日志已处理</h2></div></div>
+  <div class="report-grid">
+    {% for report in results %}
+    <a class="report-card glass" href="/reports/{{ report.id }}">
+      <div><span class="status {{ report.status }}">{{ report.status == 'completed' and '已完成' or '失败' }}</span><h3>{{ report.original_name }}</h3><p>{{ report.status == 'completed' and ('读取 ' ~ report.file_count ~ ' 个文件，命中 ' ~ report.match_count ~ ' 个特征') or report.error }}</p></div>
+      <span class="arrow">→</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

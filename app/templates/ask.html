@@ -1,4 +1,51 @@
-{% extends "base.html" %}{% block content %}
-<section class="chat-shell glass"><div class="chat-head"><div><p class="eyebrow">智能问答</p><h1>维护知识对话</h1><p>历史对话会保存在当前账号下；回答优先使用内部特征库，再调用配置好的流式 LLM。回答支持 Markdown 格式。</p></div><span class="relation">{{ history|length }} 条历史消息</span></div><div class="chat-history" id="chat-history">{% for message in history %}<article class="chat-bubble {{ message.role }}"><small>{{ message.role == 'user' and '你' or 'BMC 助手' }} · {{ message.created_at }}</small><div class="{{ 'markdown-output' if message.role == 'assistant' else 'message-text' }}"{% if message.role == 'assistant' %} data-markdown{% endif %}>{{ message.content }}</div></article>{% else %}<div class="chat-empty">开始提问吧。例如：<br>“SEL 日志提示风扇转速异常，下一步应检查什么？”</div>{% endfor %}</div><div class="chat-composer"><textarea id="question" placeholder="输入你的维护问题，按 Enter 发送，Shift + Enter 换行"></textarea><button class="button primary" id="ask-button">发送</button></div></section>
-<script>const input=document.getElementById('question'),send=document.getElementById('ask-button'),historyBox=document.getElementById('chat-history');document.querySelectorAll('[data-markdown]').forEach(output=>BmcMarkdown.renderTo(output,output.textContent));function addBubble(role,text){const el=document.createElement('article'),label=role==='user'?'你':'BMC 助手',output=document.createElement('div');el.className='chat-bubble '+role;el.innerHTML='<small>'+label+'</small>';output.className=role==='assistant'?'markdown-output':'message-text';el.append(output);if(role==='assistant')BmcMarkdown.renderTo(output,text);else output.textContent=text;historyBox.append(el);historyBox.scrollTop=historyBox.scrollHeight;return output}async function ask(){const question=input.value.trim();if(!question||send.disabled)return;historyBox.querySelector('.chat-empty')?.remove();addBubble('user',question);input.value='';send.disabled=true;const output=addBubble('assistant','正在分析…');try{const response=await fetch('/ask/stream?question='+encodeURIComponent(question));if(!response.ok)throw new Error('请求失败');const reader=response.body.getReader(),decoder=new TextDecoder();let text='';while(true){const {done,value}=await reader.read();if(done)break;text+=decoder.decode(value,{stream:true});BmcMarkdown.renderTo(output,text);historyBox.scrollTop=historyBox.scrollHeight}}catch(error){BmcMarkdown.renderTo(output,'**分析失败：** '+error.message)}finally{send.disabled=false;input.focus()}}send.onclick=ask;input.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();ask()}})</script>
+{% extends "base.html" %}
+{% block content %}
+<section class="chat-shell glass">
+  <div class="chat-head">
+    <div>
+      <p class="eyebrow">智能问答</p>
+      <h1>维护知识对话</h1>
+      <p>回答优先引用内部特征库和案例，再调用当前模型。支持流式 Markdown、表格和可折叠思考过程。</p>
+    </div>
+    {% set conversation_switch_template = '/ask?conversation={id}' %}
+    {% set conversation_new_action = '/ask/conversations' %}
+    {% set conversation_rename_action = '/ask/conversations/' ~ active_conversation.id ~ '/rename' %}
+    {% set conversation_csrf_markup = csrf_input(request) %}
+    {% include '_conversation_controls.html' %}
+  </div>
+  {% if context_report|default(None) %}
+  <div class="chat-context">
+    <div><span>当前报告上下文</span><strong>#{{ context_report.id }} · {{ context_report.original_name }}</strong></div>
+    <a href="/reports/{{ context_report.id }}">返回报告</a>
+  </div>
+  {% endif %}
+  <div class="chat-history-wrap">
+    <div class="chat-history" id="chat-history" role="log" aria-live="polite" aria-relevant="additions text">
+      {% for message in history %}
+      <article class="chat-bubble {{ message.role }}">
+        <small>{{ message.role == 'user' and '你' or '运维助手' }} · {{ message.created_at }}</small>
+        <div class="{{ 'markdown-output' if message.role == 'assistant' else 'message-text' }}"{% if message.role == 'assistant' %} data-markdown{% endif %}>{{ message.content }}</div>
+      </article>
+      {% else %}
+      <div class="chat-empty">开始新对话。<br>例如：“SEL 日志提示风扇转速异常，下一步应检查什么？”</div>
+      {% endfor %}
+    </div>
+    <button class="scroll-latest" id="ask-latest" type="button" hidden>回到最新 ↓</button>
+  </div>
+  <div class="chat-composer">
+    <textarea id="question" maxlength="3000" aria-label="维护问题" data-context-prompt="{{ initial_question|default('') and 'true' or 'false' }}" placeholder="输入维护问题；Enter 或 Ctrl/⌘+Enter 发送，Shift+Enter 换行">{{ initial_question|default('') }}</textarea>
+    <button class="button primary" id="ask-button" type="button" aria-label="发送" disabled>发送</button>
+  </div>
+</section>
+<script>
+BmcChat.mount({
+  scope: 'general',
+  inputId: 'question',
+  buttonId: 'ask-button',
+  historyId: 'chat-history',
+  latestButtonId: 'ask-latest',
+  endpoint: '/ask/stream',
+  conversationId: {{ active_conversation.id }}
+});
+</script>
 {% endblock %}

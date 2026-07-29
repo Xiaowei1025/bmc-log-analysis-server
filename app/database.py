@@ -176,6 +176,72 @@ def init_db():
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY(tool_id) REFERENCES tools(id), FOREIGN KEY(created_by) REFERENCES users(id)
         );
+        CREATE TABLE IF NOT EXISTS welink_sources (
+          id INTEGER PRIMARY KEY, source_type TEXT NOT NULL CHECK(source_type IN ('notice_group','discussion_group','person')),
+          display_name TEXT NOT NULL, conversation_key TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
+          enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)), lookback_days INTEGER NOT NULL DEFAULT 3 CHECK(lookback_days BETWEEN 0 AND 365),
+          created_by INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(source_type, conversation_key, created_by), FOREIGN KEY(created_by) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS welink_recipients (
+          id INTEGER PRIMARY KEY, recipient_type TEXT NOT NULL CHECK(recipient_type IN ('group','person')),
+          display_name TEXT NOT NULL, receiver_key TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+          created_by INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(recipient_type, receiver_key, created_by), FOREIGN KEY(created_by) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS welink_runs (
+          id INTEGER PRIMARY KEY, status TEXT NOT NULL CHECK(status IN ('awaiting_bridge','queued','completed','failed')),
+          source_count INTEGER NOT NULL DEFAULT 0, recipient_count INTEGER NOT NULL DEFAULT 0, summary TEXT NOT NULL DEFAULT '',
+          run_mode TEXT NOT NULL DEFAULT 'demo', progress INTEGER NOT NULL DEFAULT 0,
+          current_stage TEXT NOT NULL DEFAULT '等待开始',
+          requested_by INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(requested_by) REFERENCES users(id)
+        );
+        CREATE TABLE IF NOT EXISTS welink_issues (
+          id INTEGER PRIMARY KEY, title TEXT NOT NULL, severity TEXT NOT NULL DEFAULT 'P2',
+          status TEXT NOT NULL DEFAULT '处理中', impact TEXT NOT NULL DEFAULT '', owner TEXT NOT NULL DEFAULT '', due_at TEXT,
+          background TEXT NOT NULL DEFAULT '', latest_progress TEXT NOT NULL DEFAULT '', root_cause TEXT NOT NULL DEFAULT '',
+          risk_reason TEXT NOT NULL DEFAULT '', next_step TEXT NOT NULL DEFAULT '', participants TEXT NOT NULL DEFAULT '[]',
+          run_id INTEGER, is_demo INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(run_id) REFERENCES welink_runs(id) ON DELETE SET NULL
+        );
+        CREATE TABLE IF NOT EXISTS welink_issue_evidence (
+          id INTEGER PRIMARY KEY, issue_id INTEGER NOT NULL, source_name TEXT NOT NULL, author TEXT NOT NULL DEFAULT '',
+          message_time TEXT NOT NULL DEFAULT '', excerpt TEXT NOT NULL, is_key INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY(issue_id) REFERENCES welink_issues(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS welink_issue_actions (
+          id INTEGER PRIMARY KEY, issue_id INTEGER NOT NULL, title TEXT NOT NULL, owner TEXT NOT NULL DEFAULT '', due_at TEXT,
+          status TEXT NOT NULL DEFAULT '待执行', priority TEXT NOT NULL DEFAULT '高', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(issue_id) REFERENCES welink_issues(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS welink_reports (
+          id INTEGER PRIMARY KEY, run_id INTEGER, run_mode TEXT NOT NULL DEFAULT 'demo',
+          content TEXT NOT NULL, created_by INTEGER NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(run_id) REFERENCES welink_runs(id) ON DELETE SET NULL,
+          FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS chat_conversations (
+          id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL,
+          scope TEXT NOT NULL CHECK(scope IN ('general','welink')),
+          context_mode TEXT NOT NULL DEFAULT '',
+          title TEXT NOT NULL DEFAULT '新对话',
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS welink_chat_messages (
+          id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, role TEXT NOT NULL CHECK(role IN ('user','assistant')),
+          content TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_by INTEGER,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL
+        );
         CREATE INDEX IF NOT EXISTS idx_knowledge_cases_creator ON knowledge_cases(created_by, updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_case_log_links_case ON case_log_links(knowledge_case_id);
         CREATE INDEX IF NOT EXISTS idx_case_imports_case ON case_imports(knowledge_case_id, created_at DESC);
@@ -186,6 +252,11 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_analysis_skill_findings_analysis ON analysis_skill_findings(analysis_id, severity);
         CREATE INDEX IF NOT EXISTS idx_requirement_requests_status ON requirement_requests(status, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_requirement_review_events_requirement ON requirement_review_events(requirement_id, reviewed_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_welink_sources_creator_enabled ON welink_sources(created_by, enabled, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_welink_recipients_creator_enabled ON welink_recipients(created_by, enabled, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_welink_runs_requester_created ON welink_runs(requested_by, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_welink_issues_updated ON welink_issues(updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_welink_chat_user ON welink_chat_messages(user_id, id);
         """
     )
     # Existing local MVP databases are upgraded in place. SQLite has no
@@ -199,6 +270,29 @@ def init_db():
     _add_column_if_missing(db, "analyses", "match_count", "INTEGER NOT NULL DEFAULT 0")
     _add_column_if_missing(db, "analyses", "llm_summary", "TEXT")
     _add_column_if_missing(db, "case_imports", "extracted_body", "TEXT NOT NULL DEFAULT ''")
+    _add_column_if_missing(db, "welink_runs", "run_mode", "TEXT NOT NULL DEFAULT 'demo'")
+    _add_column_if_missing(db, "welink_runs", "progress", "INTEGER NOT NULL DEFAULT 0")
+    _add_column_if_missing(db, "welink_runs", "current_stage", "TEXT NOT NULL DEFAULT '等待开始'")
+    _add_column_if_missing(db, "welink_reports", "run_mode", "TEXT NOT NULL DEFAULT 'demo'")
+    _add_column_if_missing(db, "chat_conversations", "context_mode", "TEXT NOT NULL DEFAULT ''")
+    _add_column_if_missing(db, "chat_messages", "conversation_id", "INTEGER")
+    _add_column_if_missing(db, "welink_chat_messages", "conversation_id", "INTEGER")
+    db.execute(
+        """UPDATE welink_reports SET run_mode=CASE
+        WHEN content LIKE '%巡检报告（生产桥接数据）%' THEN 'production' ELSE 'demo' END
+        WHERE run_mode IS NULL OR run_mode='' OR (run_mode='demo' AND content LIKE '%巡检报告（生产桥接数据）%')"""
+    )
+    db.execute(
+        """UPDATE welink_runs SET
+        progress=CASE WHEN status IN ('completed','failed') THEN 100 WHEN status='queued' THEN 35 ELSE progress END,
+        current_stage=CASE
+          WHEN status='completed' THEN '已完成'
+          WHEN status='failed' THEN '执行失败'
+          WHEN status='queued' THEN '等待内网桥接处理'
+          ELSE current_stage END
+        WHERE progress=0 AND current_stage='等待开始'"""
+    )
+    _backfill_chat_conversations(db)
     _ensure_analysis_matches_schema(db)
     _backfill_feature_versions(db)
     # Operators can promote pre-existing local accounts during a controlled
@@ -215,6 +309,9 @@ def init_db():
             [(username,) for username in admin_usernames],
         )
     db.execute("CREATE INDEX IF NOT EXISTS idx_analysis_matches_active ON analysis_matches(analysis_id, case_id, feature_version)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_chat_conversations_user_scope ON chat_conversations(user_id,scope,context_mode,updated_at DESC)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation ON chat_messages(conversation_id,id)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_welink_chat_conversation ON welink_chat_messages(conversation_id,id)")
     db.execute(
         """INSERT OR IGNORE INTO feature_log_links (case_id,analysis_id,relation_type,linked_by)
         SELECT m.case_id,m.analysis_id,'automatic',a.created_by
@@ -234,6 +331,25 @@ def _add_column_if_missing(db, table: str, column: str, definition: str):
     existing = {row["name"] for row in db.execute(f"PRAGMA table_info({table})")}
     if column not in existing:
         db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def _backfill_chat_conversations(db):
+    for table, scope in (("chat_messages", "general"), ("welink_chat_messages", "welink")):
+        user_ids = [row["user_id"] for row in db.execute(f"SELECT DISTINCT user_id FROM {table} WHERE conversation_id IS NULL")]
+        for user_id in user_ids:
+            context_mode = "demo" if scope == "welink" else ""
+            conversation = db.execute(
+                "SELECT id FROM chat_conversations WHERE user_id=? AND scope=? AND context_mode=? ORDER BY id LIMIT 1",
+                (user_id, scope, context_mode),
+            ).fetchone()
+            conversation_id = conversation["id"] if conversation else db.execute(
+                "INSERT INTO chat_conversations (user_id,scope,context_mode,title) VALUES (?,?,?,?)",
+                (user_id, scope, context_mode, "历史对话"),
+            ).lastrowid
+            db.execute(
+                f"UPDATE {table} SET conversation_id=? WHERE user_id=? AND conversation_id IS NULL",
+                (conversation_id, user_id),
+            )
 
 
 def _ensure_analysis_matches_schema(db):

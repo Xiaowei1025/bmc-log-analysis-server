@@ -2,11 +2,185 @@
 {% block content %}
 <section class="page-heading compact-heading"><div><a class="back" href="/cases">← 返回案例库</a><p class="eyebrow">发布案例</p><h1>沉淀一篇可复用的维护案例</h1><p>可用富文本快速编写、切换到 Markdown，或先导入既有文档再校对发布。</p></div><a class="button" href="/cases/import">一键导入案例</a></section>
 {% if imported_document %}<section class="case-import-ready panel glass"><div><p class="eyebrow">已导入待发布草稿</p><h2>{{ imported_document.original_name }}</h2><p>{{ imported_document.extraction_note }} 已提取 {{ imported_document.extracted_characters }} 个字符；请检查标题、摘要与正文，再发布为正式案例。</p></div><div class="case-import-ready-actions"><a class="button" href="/cases/imports/{{ imported_document.id }}/download">查看原文件</a><form method="post" action="/cases/imports/{{ imported_document.id }}/discard"><button class="text-button" type="submit">取消本次导入</button></form></div></section>{% endif %}
-<form id="knowledge-case-form" class="editor-form glass" method="post" action="/cases" enctype="multipart/form-data">{% if imported_document %}<input type="hidden" name="import_id" value="{{ imported_document.id }}">{% endif %}<div class="form-grid"><label class="span-2">案例标题<input name="title" required value="{{ knowledge_case.title if knowledge_case else '' }}" placeholder="例如：R220KV2 风扇 3 低转速故障排查"></label><label class="span-2">摘要（可选）<input name="summary" value="{{ knowledge_case.summary if knowledge_case else '' }}" placeholder="一句话说明故障现象、机型或适用条件"></label><section class="span-2 case-editor-block" aria-labelledby="case-body-label"><div class="case-editor-head"><div><strong id="case-body-label">案例正文（可选）</strong><small id="case-editor-hint">使用富文本直接排版；内容会安全保存为 Markdown，便于后续检索与问答。</small></div><div class="case-editor-actions"><div class="editor-mode-switch" role="group" aria-label="正文输入方式"><button type="button" class="is-active" data-editor-mode="rich" aria-pressed="true">富文本</button><button type="button" data-editor-mode="markdown" aria-pressed="false">Markdown</button></div><button type="button" id="case-preview-button" class="editor-action">实时预览</button><button type="button" id="markdown-syntax-button" class="editor-action" hidden>语法说明</button></div></div><div id="case-rich-toolbar" class="rich-toolbar" aria-label="正文格式工具栏"><button type="button" data-editor-command="heading" title="二级标题">标题</button><button type="button" data-editor-command="bold" title="加粗（Markdown：⌘/Ctrl+B）">粗体</button><button type="button" data-editor-command="italic" title="强调">斜体</button><button type="button" data-editor-command="unordered" title="无序列表">列表</button><button type="button" data-editor-command="ordered" title="有序列表">编号</button><button type="button" data-editor-command="quote" title="引用">引用</button><button type="button" data-editor-command="code" title="代码块">代码</button><button type="button" data-editor-command="clear" data-rich-only title="清除所选文本的格式">清除格式</button></div><textarea id="case-markdown-input" name="body" class="case-markdown-input" placeholder="">{{ knowledge_case.body if knowledge_case else '' }}</textarea><div id="case-rich-editor" class="case-rich-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="富文本案例正文" data-placeholder="可直接输入案例内容；用上方工具栏添加标题、列表、引用或代码。" hidden></div><article id="case-preview" class="case-preview panel" hidden><div class="case-preview-head"><strong>发布前预览</strong><small>按当前输入方式安全渲染</small></div><div id="case-preview-content" class="markdown-output"></div></article></section><label class="span-2 source-upload">关联日志（可选，可多选）<input type="file" name="bundles" multiple accept=".tar,.gz,.tgz,.zip,.log,.txt"><small>每份日志将生成独立分析报告，并自动关联到本案例。</small></label></div><p class="hint">请至少填写案例正文或上传一份日志。正文将安全地渲染，并作为智能问答的内部知识来源。</p><button class="button primary">发布案例</button></form>
-<dialog id="markdown-syntax-dialog" class="case-editor-dialog glass"><div class="dialog-head"><div><p class="eyebrow">Markdown 快速说明</p><h2>常用语法</h2></div><button class="icon-button" type="button" id="markdown-syntax-close" aria-label="关闭">×</button></div><div class="syntax-grid"><code># 一级标题</code><code>## 二级标题</code><code>**加粗文字**</code><code>*强调文字*</code><code>- 无序列表</code><code>1. 有序列表</code><code>&gt; 重要提示或引用</code><code>&#96;命令或关键字&#96;</code><code>&#96;&#96;&#96;<br>多行代码<br>&#96;&#96;&#96;</code><code>[链接文字](https://example.com)</code></div><p class="hint">平台会安全渲染上述语法。建议使用标题、列表和代码块，让日志证据与处理步骤更易阅读和检索。</p></dialog>
+{% if source_report|default(None) %}<section class="context-source glass"><div><p class="eyebrow">来源报告</p><h2>{{ source_report.original_name }}</h2><p>发布后会自动关联报告 #{{ source_report.id }}，后续可从案例回到原始分析证据。</p></div><a class="button" href="/reports/{{ source_report.id }}">返回报告</a></section>{% endif %}
+<form id="knowledge-case-form" class="editor-form glass" method="post" action="/cases" enctype="multipart/form-data" data-draft-key="case-{% if imported_document %}import-{{ imported_document.id }}{% elif source_report|default(None) %}report-{{ source_report.id }}{% else %}new{% endif %}" data-draft-label="维护案例草稿" data-pending-label="正在发布案例…">{% if imported_document %}<input type="hidden" name="import_id" value="{{ imported_document.id }}">{% endif %}{% if source_report|default(None) %}<input type="hidden" name="report_id" value="{{ source_report.id }}">{% endif %}<div class="form-grid"><label class="span-2">案例标题<input name="title" required value="{{ knowledge_case.title if knowledge_case else '' }}" placeholder="例如：R220KV2 风扇 3 低转速故障排查"></label><label class="span-2">摘要（可选）<input name="summary" value="{{ knowledge_case.summary if knowledge_case else '' }}" placeholder="一句话说明故障现象、机型或适用条件"></label><section class="span-2 case-editor-block" aria-labelledby="case-body-label"><div class="case-editor-head"><div><strong id="case-body-label">案例正文（可选）</strong><small id="case-editor-hint">使用富文本直接排版；内容会安全保存为 Markdown，便于后续检索与问答。</small></div><div class="case-editor-actions"><div class="editor-mode-switch" role="group" aria-label="正文输入方式"><button type="button" class="is-active" data-editor-mode="rich" aria-pressed="true">富文本</button><button type="button" data-editor-mode="markdown" aria-pressed="false">Markdown</button></div><button type="button" id="case-preview-button" class="editor-action">实时预览</button><button type="button" id="markdown-syntax-button" class="editor-action" hidden>语法说明</button></div></div><div id="case-rich-toolbar" class="rich-toolbar" aria-label="正文格式工具栏"><button type="button" data-editor-command="heading" title="二级标题">标题</button><button type="button" data-editor-command="bold" title="加粗（Markdown：⌘/Ctrl+B）">粗体</button><button type="button" data-editor-command="italic" title="强调">斜体</button><button type="button" data-editor-command="unordered" title="无序列表">列表</button><button type="button" data-editor-command="ordered" title="有序列表">编号</button><button type="button" data-editor-command="quote" title="引用">引用</button><button type="button" data-editor-command="code" title="代码块">代码</button><button type="button" data-editor-command="clear" data-rich-only title="清除所选文本的格式">清除格式</button></div><textarea id="case-markdown-input" name="body" class="case-markdown-input" placeholder="">{{ knowledge_case.body if knowledge_case else '' }}</textarea><div id="case-rich-editor" class="case-rich-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="富文本案例正文" data-placeholder="可直接输入案例内容；用上方工具栏添加标题、列表、引用或代码。" hidden></div><article id="case-preview" class="case-preview panel" hidden><div class="case-preview-head"><strong>发布前预览</strong><small>按当前输入方式安全渲染</small></div><div id="case-preview-content" class="markdown-output"></div></article></section><label class="span-2 source-upload">关联日志（可选，可多选）<input type="file" name="bundles" multiple accept=".tar,.gz,.tgz,.zip,.log,.txt"><small>每份日志将生成独立分析报告，并自动关联到本案例。</small></label></div><p class="hint">请至少填写案例正文、关联来源报告或上传一份日志。正文将安全渲染并参与智能问答。</p><button class="button primary">发布案例</button></form>
+<dialog id="markdown-syntax-dialog" class="case-editor-dialog markdown-guide-dialog glass">
+  <div class="dialog-head markdown-guide-head">
+    <div>
+      <p class="eyebrow">案例写作规范</p>
+      <h2>Markdown 专业使用指南</h2>
+      <p>每项都提供“Markdown 写法”和“本工具实际效果”。示例由当前安全渲染器生成，可直接照着使用。</p>
+    </div>
+    <button class="icon-button" type="button" id="markdown-syntax-close" aria-label="关闭 Markdown 使用指南">×</button>
+  </div>
+  <div class="markdown-guide-body">
+    <section class="markdown-guide-intro" aria-label="Markdown 参考规范和兼容范围">
+      <div>
+        <strong>参考规范</strong>
+        <p>核心语法参考 CommonMark 0.31.2，表格参考 GitHub Flavored Markdown。内容结合服务器维护案例的实际写作场景整理。</p>
+      </div>
+      <div class="markdown-reference-links">
+        <a href="https://spec.commonmark.org/0.31.2/" target="_blank" rel="noopener noreferrer">CommonMark 规范 ↗</a>
+        <a href="https://github.github.com/gfm/" target="_blank" rel="noopener noreferrer">GFM 规范 ↗</a>
+      </div>
+    </section>
+
+    <nav class="markdown-guide-index" aria-label="Markdown 指南目录">
+      <a href="#md-structure">标题与段落</a>
+      <a href="#md-emphasis">强调与行内代码</a>
+      <a href="#md-lists">列表</a>
+      <a href="#md-quote">引用</a>
+      <a href="#md-links">链接与分隔线</a>
+      <a href="#md-code">代码块</a>
+      <a href="#md-table">表格</a>
+      <a href="#md-case-template">完整案例模板</a>
+    </nav>
+
+    <div class="markdown-guide-grid">
+      <article class="syntax-guide-card" id="md-structure">
+        <div class="syntax-guide-title"><span>01</span><div><h3>标题与段落</h3><p>用标题建立“现象—证据—根因—处理”的清晰层级。</p></div></div>
+        <div class="syntax-compare">
+          <div><small>Markdown 写法</small><pre><code data-markdown-source># 风扇故障复盘
+
+## 现象
+服务器出现风扇低转速告警。
+
+## 影响范围
+涉及 2 台计算节点。</code></pre></div>
+          <div><small>实际效果</small><div class="markdown-output syntax-example-result" data-markdown-result></div></div>
+        </div>
+        <p class="syntax-tip">建议：一篇案例只使用一个一级标题；正文模块使用二级标题。空一行会开始新段落，本工具同一段内的换行也会保留显示。</p>
+      </article>
+
+      <article class="syntax-guide-card" id="md-emphasis">
+        <div class="syntax-guide-title"><span>02</span><div><h3>强调与行内代码</h3><p>突出结论、风险和需要精确输入的命令或字段。</p></div></div>
+        <div class="syntax-compare">
+          <div><small>Markdown 写法</small><pre><code data-markdown-source>根因是 **风扇连接器松动**。
+
+该结论仍需 *现场复核*。
+
+检查字段 `Fan3Speed`。</code></pre></div>
+          <div><small>实际效果</small><div class="markdown-output syntax-example-result" data-markdown-result></div></div>
+        </div>
+        <p class="syntax-tip">快捷键：选中文字后按 Ctrl+B（macOS 为 Command+B）可插入或取消粗体。代码、命令、日志字段建议使用反引号包裹。</p>
+      </article>
+
+      <article class="syntax-guide-card" id="md-lists">
+        <div class="syntax-guide-title"><span>03</span><div><h3>无序与有序列表</h3><p>无序列表适合并列证据，有序列表适合执行步骤。</p></div></div>
+        <div class="syntax-compare">
+          <div><small>Markdown 写法</small><pre><code data-markdown-source>- SEL 出现风扇告警
+- BMC 页面转速低于阈值
+- 现场听到异常噪声
+
+1. 导出 BMC 日志
+2. 核对固件版本
+3. 检查风扇连接器</code></pre></div>
+          <div><small>实际效果</small><div class="markdown-output syntax-example-result" data-markdown-result></div></div>
+        </div>
+        <p class="syntax-tip">建议：列表符号后保留一个空格。当前编辑器重点支持单层列表，复杂嵌套内容建议拆成多个小节。</p>
+      </article>
+
+      <article class="syntax-guide-card" id="md-quote">
+        <div class="syntax-guide-title"><span>04</span><div><h3>引用与重要提示</h3><p>用于标识原始告警、日志原文或必须注意的风险。</p></div></div>
+        <div class="syntax-compare">
+          <div><small>Markdown 写法</small><pre><code data-markdown-source>&gt; 2026-07-30 08:16:21
+&gt; Fan 3 speed below lower critical threshold
+
+&gt; 操作前先确认业务已迁移。</code></pre></div>
+          <div><small>实际效果</small><div class="markdown-output syntax-example-result" data-markdown-result></div></div>
+        </div>
+        <p class="syntax-tip">建议：引用必须保留时间、设备或日志来源。不要只写结论，要让后续维护人员能够追溯证据。</p>
+      </article>
+
+      <article class="syntax-guide-card" id="md-links">
+        <div class="syntax-guide-title"><span>05</span><div><h3>链接与分隔线</h3><p>链接到受控知识来源，并用分隔线划分不同阶段。</p></div></div>
+        <div class="syntax-compare">
+          <div><small>Markdown 写法</small><pre><code data-markdown-source>[查看内部维护规范](https://example.com/runbook)
+
+---
+
+以下为处理完成后的验证记录。</code></pre></div>
+          <div><small>实际效果</small><div class="markdown-output syntax-example-result" data-markdown-result></div></div>
+        </div>
+        <p class="syntax-tip">安全说明：当前只把 http/https 地址渲染为可点击链接。发布前请确认链接属于公司批准的知识库或工单系统。</p>
+      </article>
+
+      <article class="syntax-guide-card" id="md-code">
+        <div class="syntax-guide-title"><span>06</span><div><h3>多行代码与日志片段</h3><p>三个反引号可完整保留多行命令、配置和日志格式。</p></div></div>
+        <div class="syntax-compare">
+          <div><small>Markdown 写法</small><pre><code data-markdown-source>```
+ipmitool sdr type fan
+Fan3 | 1200 RPM | ok
+```</code></pre></div>
+          <div><small>实际效果</small><div class="markdown-output syntax-example-result" data-markdown-result></div></div>
+        </div>
+        <p class="syntax-tip">发布前请脱敏：删除序列号、IP、账号、Token 和客户信息。日志较长时只保留能支撑结论的关键片段。</p>
+      </article>
+
+      <article class="syntax-guide-card syntax-guide-wide" id="md-table">
+        <div class="syntax-guide-title"><span>07</span><div><h3>表格（GFM）</h3><p>适合对比节点、时间、状态、责任人和下一步行动。</p></div></div>
+        <div class="syntax-compare">
+          <div><small>Markdown 写法</small><pre><code data-markdown-source>| 节点 | 告警 | 当前状态 | 责任人 |
+| :--- | :--- | :---: | ---: |
+| Node-01 | 风扇低转速 | 已恢复 | 张工 |
+| Node-02 | 无 | 正常 | 李工 |</code></pre></div>
+          <div><small>实际效果</small><div class="markdown-output syntax-example-result" data-markdown-result></div></div>
+        </div>
+        <p class="syntax-tip">第二行必须使用至少三个短横线；冒号控制左对齐、居中和右对齐。每一行的列数应保持一致。</p>
+      </article>
+
+      <article class="syntax-guide-card syntax-guide-wide" id="md-case-template">
+        <div class="syntax-guide-title"><span>08</span><div><h3>完整服务器维护案例模板</h3><p>下面是一份可直接复制并替换内容的专业案例骨架。</p></div></div>
+        <div class="syntax-compare syntax-compare-template">
+          <div><small>Markdown 写法</small><pre><code data-markdown-source># [设备/故障名称] 维护案例
+
+## 1. 问题背景
+- 设备型号：
+- BMC/BIOS 版本：
+- 发生时间：
+- 影响范围：
+
+## 2. 故障现象
+描述告警、业务影响和现场表现。
+
+## 3. 关键证据
+&gt; 粘贴经过脱敏的关键日志，并标注时间和来源。
+
+| 检查项 | 结果 | 结论 |
+| :--- | :--- | :--- |
+| SEL 日志 | Fan 3 告警 | 与现象一致 |
+| 风扇转速 | 1200 RPM | 低于阈值 |
+
+## 4. 根因分析
+**确认根因：** 在此写清直接原因和判断依据。
+
+## 5. 处理步骤
+1. 完成业务迁移或风险隔离。
+2. 执行硬件检查或部件更换。
+3. 清除告警并重新验证。
+
+## 6. 验证结果
+记录恢复时间、指标和复测结果。
+
+## 7. 后续行动
+- 责任人：
+- 计划完成时间：
+- 防复发措施：</code></pre></div>
+          <div><small>实际效果</small><div class="markdown-output syntax-example-result syntax-template-preview" data-markdown-result></div></div>
+        </div>
+      </article>
+    </div>
+
+    <aside class="markdown-compatibility-note">
+      <strong>本工具兼容边界</strong>
+      <p>为确保内网安全和跨 Windows 浏览器的一致显示，案例预览只渲染上述受控语法。原生 HTML、图片语法、任务列表、删除线和复杂嵌套列表当前不会作为正式能力承诺；需要图片时请使用公司批准的附件或知识库链接。</p>
+    </aside>
+  </div>
+</dialog>
 <script>
 (() => {
   const form = document.getElementById('knowledge-case-form');
+  const editorBlock = document.querySelector('.case-editor-block');
   const markdown = document.getElementById('case-markdown-input');
   const rich = document.getElementById('case-rich-editor');
   markdown.placeholder = ['# 现象', '', '## 环境', '- 机型：', '- BMC 版本：', '', '## 日志证据', '', '## 排查过程', '', '## 根因与处理', '', '## 复盘建议'].join(String.fromCharCode(10));
@@ -14,6 +188,7 @@
   const hint = document.getElementById('case-editor-hint');
   const preview = document.getElementById('case-preview');
   const previewContent = document.getElementById('case-preview-content');
+  const previewStatus = preview.querySelector('.case-preview-head small');
   const previewButton = document.getElementById('case-preview-button');
   const syntaxButton = document.getElementById('markdown-syntax-button');
   const syntaxDialog = document.getElementById('markdown-syntax-dialog');
@@ -53,7 +228,7 @@
   const richToMarkdown = () => Array.from(rich.childNodes).map(blockMarkdown).join('').replace(/\n{3,}/g, newline + newline).trim();
   const currentMarkdown = () => mode === 'rich' ? richToMarkdown() : markdown.value.trim();
   const updatePreview = () => window.BmcMarkdown.renderTo(previewContent, currentMarkdown() || '尚未填写案例正文。');
-  const refreshPreview = () => { if (!preview.hidden) updatePreview(); };
+  const refreshPreview = () => { if (mode === 'markdown' || !preview.hidden) updatePreview(); };
   const cacheMarkdownRange = () => {
     markdownRange = {start: markdown.selectionStart || 0, end: markdown.selectionEnd || 0};
   };
@@ -173,16 +348,24 @@
       rich.hidden = false;
       markdown.hidden = true;
       syntaxButton.hidden = true;
+      preview.hidden = true;
+      previewButton.hidden = false;
+      previewButton.textContent = '实时预览';
+      previewStatus.textContent = '按当前输入方式安全渲染';
       hint.textContent = '选中文本后可用上方工具栏格式化；常用快捷键如 ⌘/Ctrl+B 也可直接使用。';
     } else {
       markdown.value = richToMarkdown();
       markdown.hidden = false;
       rich.hidden = true;
       syntaxButton.hidden = false;
-      hint.textContent = '可直接输入 Markdown；选中文本后可点上方工具栏，或按 ⌘/Ctrl+B 插入/取消加粗。';
+      preview.hidden = false;
+      previewButton.hidden = true;
+      previewStatus.textContent = '实时同步 · 安全渲染';
+      hint.textContent = '左侧书写、右侧实时预览；选中文字可点工具栏，或按 ⌘/Ctrl+B 插入/取消加粗。';
       cacheMarkdownRange();
     }
     mode = nextMode;
+    editorBlock.dataset.editorMode = mode;
     updateToolbar();
     document.querySelectorAll('[data-editor-mode]').forEach(button => {
       const active = button.dataset.editorMode === mode;
@@ -193,6 +376,7 @@
   };
 
   ['select', 'keyup', 'click', 'focus', 'input'].forEach(name => markdown.addEventListener(name, cacheMarkdownRange));
+  markdown.addEventListener('input', refreshPreview);
   markdown.addEventListener('keydown', event => {
     if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'b') {
       event.preventDefault();
@@ -212,6 +396,10 @@
   syntaxButton.addEventListener('click', () => syntaxDialog.showModal());
   document.getElementById('markdown-syntax-close').addEventListener('click', () => syntaxDialog.close());
   syntaxDialog.addEventListener('click', event => { if (event.target === syntaxDialog) syntaxDialog.close(); });
+  syntaxDialog.querySelectorAll('[data-markdown-source]').forEach(source => {
+    const result = source.closest('.syntax-compare').querySelector('[data-markdown-result]');
+    window.BmcMarkdown.renderTo(result, source.textContent.trim());
+  });
   toolbar.addEventListener('mousedown', event => {
     if (event.target.closest('[data-editor-command]')) event.preventDefault();
   });

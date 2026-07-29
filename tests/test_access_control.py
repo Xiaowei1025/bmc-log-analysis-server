@@ -107,10 +107,10 @@ class AccessControlTests(unittest.TestCase):
             (username, "not-used-in-test", role),
         ).lastrowid
 
-    def test_anonymous_dashboard_is_rejected(self):
-        with self.assertRaises(HTTPException) as context:
-            main.dashboard(make_request())
-        self.assertEqual(401, context.exception.status_code)
+    def test_anonymous_dashboard_redirects_to_login(self):
+        response = main.dashboard(make_request())
+        self.assertEqual(303, response.status_code)
+        self.assertEqual("/login", response.headers["location"])
 
     def test_production_secret_rejects_examples_and_short_values(self):
         self.assertFalse(main.production_secret_is_safe("replace-with-a-long-random-secret"))

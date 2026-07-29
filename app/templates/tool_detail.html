@@ -1,1 +1,121 @@
-{% extends "base.html" %}{% block content %}<div class="tool-head">{% if tool.logo_path %}<img src="/asset/{{ tool.logo_path.split('/')[-1] }}" alt="{{ tool.name }} logo">{% else %}<div class="logo-placeholder">工具</div>{% endif %}<div><h1>{{ tool.name }}</h1><p>{{ tool.short_description }}</p><p class="meta">作者：{{ tool.username }} · 首次发布：{{ tool.created_at }}</p>{% if user and user.id == tool.created_by %}<a href="/tools/{{ tool.id }}/edit">修改介绍</a>{% endif %}</div></div><div class="grid two"><section class="card static"><h2>工具说明</h2><p class="multiline">{{ tool.details }}</p><h2>版本记录</h2>{% for version in versions %}<div class="version"><h3>v{{ version.version }}</h3><p>{{ version.release_notes or '无更新说明' }}</p><small>{{ version.created_at }} · {{ version.username }} 上传 · {{ version.downloads }} 次下载</small><p><a class="button small" href="/download/{{ version.id }}">下载此版本</a></p></div>{% endfor %}</section><section class="card static"><h2>发布新版本</h2>{% if user and user.id == tool.created_by %}<form class="form compact" method="post" action="/tools/{{ tool.id }}/versions" enctype="multipart/form-data"><label>版本号<input name="version" required></label><label>更新说明<textarea name="release_notes"></textarea></label><label>工具文件<input type="file" name="package" required></label><button>上传新版本</button></form>{% else %}<p class="hint">仅作者可以发布新版本。</p>{% endif %}<hr id="feedback"><h2>使用建议</h2>{% if user %}<form class="form compact" method="post" action="/tools/{{ tool.id }}/feedback"><textarea name="body" required placeholder="反馈问题、功能建议或使用体验"></textarea><button>提交建议</button></form>{% else %}<p><a href="/login">登录</a>后可提交建议。</p>{% endif %}{% for item in feedback %}<article class="feedback"><strong>{{ item.username }}</strong><small>{{ item.created_at }}</small><p>{{ item.body }}</p></article>{% else %}<p class="empty">暂无建议。</p>{% endfor %}</section></div>{% endblock %}
+{% extends "base.html" %}
+{% block title %}{{ tool.name }} · 工具中心{% endblock %}
+{% block content %}
+{% set total_downloads = versions|sum(attribute='downloads') %}
+<div class="tool-detail-shell">
+  <section class="tool-detail-hero glass">
+    <div class="tool-identity">
+      <div class="tool-logo-lens">
+        {% if tool.logo_path %}
+        <img src="/asset/{{ tool.logo_path.split('/')[-1] }}" alt="{{ tool.name }} logo">
+        {% else %}
+        <div class="logo-placeholder">工具</div>
+        {% endif %}
+      </div>
+      <div class="tool-identity-copy">
+        <p class="eyebrow">内部工具 · 可追溯版本</p>
+        <h1>{{ tool.name }}</h1>
+        <p class="tool-summary">{{ tool.short_description }}</p>
+        <div class="tool-meta-row">
+          <span>作者：{{ tool.username }}</span>
+          <span>首次发布：{{ tool.created_at }}</span>
+        </div>
+        {% if user and user.id == tool.created_by %}
+        <a class="button tool-secondary-action" href="/tools/{{ tool.id }}/edit">修改介绍</a>
+        {% endif %}
+      </div>
+    </div>
+    <aside class="tool-overview" aria-label="工具概览">
+      <div><span>最新版本</span><strong>{{ versions and ('v' ~ versions[0].version) or '—' }}</strong></div>
+      <div><span>历史版本</span><strong>{{ versions|length }}</strong></div>
+      <div><span>累计下载</span><strong>{{ total_downloads }}</strong></div>
+    </aside>
+  </section>
+
+  <div class="tool-detail-layout">
+    <div class="tool-detail-main">
+      <section class="tool-surface tool-description-panel">
+        <div class="tool-section-heading">
+          <div><p class="eyebrow">使用说明</p><h2>工具说明</h2></div>
+          <span class="tool-section-icon" aria-hidden="true">i</span>
+        </div>
+        <p class="multiline tool-description">{{ tool.details }}</p>
+      </section>
+
+      <section class="tool-surface tool-version-panel">
+        <div class="tool-section-heading">
+          <div><p class="eyebrow">发布历史</p><h2>版本记录</h2></div>
+          <span class="version-count">{{ versions|length }} 个版本</span>
+        </div>
+        <div class="tool-version-list">
+          {% for version in versions %}
+          <article class="tool-version-card">
+            <div class="version-rail" aria-hidden="true"><span></span></div>
+            <div class="tool-version-content">
+              <div class="tool-version-head">
+                <div><span class="version-badge">v{{ version.version }}</span><small>{{ version.created_at }}</small></div>
+                <span class="download-count">{{ version.downloads }} 次下载</span>
+              </div>
+              <p class="release-notes">{{ version.release_notes or '无更新说明' }}</p>
+              <div class="tool-version-footer">
+                <small>由 {{ version.username }} 上传</small>
+                <a class="button tool-download-button" href="/download/{{ version.id }}">
+                  <span aria-hidden="true">↓</span>下载此版本
+                </a>
+              </div>
+            </div>
+          </article>
+          {% else %}
+          <p class="empty">暂无可下载版本。</p>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+
+    <aside class="tool-detail-sidebar">
+      <section class="tool-surface tool-publish-panel">
+        <div class="tool-section-heading">
+          <div><p class="eyebrow">版本管理</p><h2>发布新版本</h2></div>
+          <span class="tool-section-icon" aria-hidden="true">＋</span>
+        </div>
+        {% if user and user.id == tool.created_by %}
+        <form class="form compact tool-form" method="post" action="/tools/{{ tool.id }}/versions" enctype="multipart/form-data" data-pending-label="正在上传…">
+          <label>版本号<input name="version" required placeholder="例如：1.1.0"></label>
+          <label>更新说明<textarea name="release_notes" placeholder="说明新增能力、修复内容和兼容性变化"></textarea></label>
+          <label>工具文件<input type="file" name="package" required></label>
+          <button class="button primary tool-action-button" type="submit">上传新版本</button>
+        </form>
+        {% else %}
+        <div class="tool-permission-note"><span aria-hidden="true">⌁</span><p>仅工具作者可以发布新版本。你仍可下载历史版本并提交使用建议。</p></div>
+        {% endif %}
+      </section>
+
+      <section class="tool-surface tool-feedback-panel" id="feedback">
+        <div class="tool-section-heading">
+          <div><p class="eyebrow">协作反馈</p><h2>使用建议</h2></div>
+          <span class="feedback-count">{{ feedback|length }}</span>
+        </div>
+        {% if user %}
+        <form class="form compact tool-form" method="post" action="/tools/{{ tool.id }}/feedback" data-pending-label="正在提交…">
+          <label class="sr-only" for="tool-feedback-body">反馈内容</label>
+          <textarea id="tool-feedback-body" name="body" required placeholder="反馈问题、功能建议或使用体验"></textarea>
+          <button class="button tool-feedback-button" type="submit">提交建议</button>
+        </form>
+        {% else %}
+        <p><a href="/login">登录</a>后可提交建议。</p>
+        {% endif %}
+        <div class="tool-feedback-list">
+          {% for item in feedback %}
+          <article class="feedback tool-feedback-item">
+            <div><strong>{{ item.username }}</strong><small>{{ item.created_at }}</small></div>
+            <p>{{ item.body }}</p>
+          </article>
+          {% else %}
+          <p class="empty tool-feedback-empty">暂无建议。你可以记录第一个使用问题或改进想法。</p>
+          {% endfor %}
+        </div>
+      </section>
+    </aside>
+  </div>
+</div>
+{% endblock %}

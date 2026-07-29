@@ -1,0 +1,82 @@
+.case-editor-block[data-editor-mode="markdown"]{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  grid-template-rows:auto auto minmax(420px,auto);
+  column-gap:16px;
+  align-items:start;
+}
+.case-editor-block[data-editor-mode="markdown"] .case-editor-head{
+  grid-column:1 / -1;
+  grid-row:1;
+}
+.case-editor-block[data-editor-mode="markdown"] .rich-toolbar{
+  grid-column:1;
+  grid-row:2;
+}
+.case-editor-block[data-editor-mode="markdown"] .case-markdown-input{
+  grid-column:1;
+  grid-row:3;
+  min-width:0;
+  min-height:420px!important;
+  margin:0;
+  border-radius:0 0 13px 13px;
+  resize:vertical;
+}
+.case-editor-block[data-editor-mode="markdown"] .case-preview{
+  grid-column:2;
+  grid-row:2 / span 2;
+  position:sticky;
+  top:92px;
+  min-width:0;
+  min-height:474px;
+  max-height:min(680px,72vh);
+  margin:0;
+  padding:16px 18px;
+  overflow:auto;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:rgba(255,255,255,.28);
+  scrollbar-gutter:stable;
+}
+.case-editor-block[data-editor-mode="markdown"] .case-preview-head{
+  position:sticky;
+  top:-16px;
+  z-index:1;
+  margin:-16px -18px 14px;
+  padding:14px 18px 11px;
+  border-bottom:1px solid var(--line);
+  background:var(--glass-strong);
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+}
+.case-editor-block[data-editor-mode="markdown"] .case-preview-content:empty::before{
+  content:"在左侧输入 Markdown，预览会立即显示在这里。";
+  color:var(--muted);
+}
+html[data-theme="dark"] .case-editor-block[data-editor-mode="markdown"] .case-preview{
+  background:rgba(7,18,35,.62);
+  border-color:rgba(168,195,237,.34);
+}
+@media(max-width:860px){
+  .case-editor-block[data-editor-mode="markdown"]{
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:auto auto auto auto;
+    row-gap:0;
+  }
+  .case-editor-block[data-editor-mode="markdown"] .case-editor-head,
+  .case-editor-block[data-editor-mode="markdown"] .rich-toolbar,
+  .case-editor-block[data-editor-mode="markdown"] .case-markdown-input,
+  .case-editor-block[data-editor-mode="markdown"] .case-preview{
+    grid-column:1;
+  }
+  .case-editor-block[data-editor-mode="markdown"] .case-editor-head{grid-row:1}
+  .case-editor-block[data-editor-mode="markdown"] .rich-toolbar{grid-row:2}
+  .case-editor-block[data-editor-mode="markdown"] .case-markdown-input{grid-row:3}
+  .case-editor-block[data-editor-mode="markdown"] .case-preview{
+    grid-row:4;
+    position:static;
+    min-height:280px;
+    max-height:none;
+    margin-top:14px;
+  }
+}
