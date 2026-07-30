@@ -3,6 +3,7 @@ import os
 import re
 import secrets
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Iterator, Optional
@@ -16,10 +17,13 @@ from starlette.middleware.sessions import SessionMiddleware
 from markupsafe import Markup
 
 from .database import connection, init_db
+from .chat_sessions import conversation_list, create_conversation, current_conversation, rename_conversation, touch_conversation
 from .bmc_skill_adapter import run_bmc_skill
 from .case_importer import CaseImportError, SUPPORTED_SUFFIXES, extract_case_document, format_label as case_import_format_label, suggested_summary, suggested_title
 from .log_parser import find_evidence, read_log_bundle
 from .security import hash_password, verify_password
+from .welink_module import register_welink_routes
+from .runtime_settings import get_setting, set_setting
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -74,11 +78,11 @@ def production_secret_is_safe(value: str | None = None) -> bool:
     return bool(secret and len(secret) >= 32 and secret not in KNOWN_UNSAFE_APP_SECRETS)
 HELP = {
     "dashboard.html": ("看板帮助", "看板汇总平台中的上传日志、已完成分析、特征和高严重度问题。点击最新报告可查看每个日志包的证据与 AI 分析。"),
-    "logs.html": ("批量分析帮助", "可同时选择多个 tar.gz、zip、tar、gz 或单个文本日志。每个文件会生成一份独立报告，互不覆盖。"),
-    "reports.html": ("报告帮助", "报告保存原始上传记录、自动命中特征和日志证据。可打开详情补充关联特征，或请求流式 LLM 分析。"),
-    "report_detail.html": ("报告详情帮助", "自动命中特征来自规则扫描。也可将本报告手动关联到其他已知特征；关联不会修改原始日志。"),
+    "logs.html": ("批量分析帮助", "可拖入或选择多个 tar.gz、zip、tar、gz 或文本日志。页面会先列出文件、大小和格式问题；确认后每个文件生成独立报告，互不覆盖。"),
+    "reports.html": ("报告帮助", "可按文件名、上传人、处理状态和特征命中筛选报告。报告保存原始上传记录、自动命中特征和日志证据。"),
+    "report_detail.html": ("报告详情帮助", "自动命中特征来自规则扫描。可直接以本报告为上下文询问 AI、沉淀特征或发布案例；关联不会复制或修改原始日志。"),
     "features.html": ("特征库帮助", "特征是可复用的问题判定规则。每条规则包含名称、严重程度、关键词、描述、建议和一个或多个日志条件。"),
-    "feature_form.html": ("编辑特征帮助", "每次保存都会生成一个规则版本。编辑已有规则后，系统会按新版本重新检查已完成的日志报告；旧版本命中会保留为可追溯历史。"),
+    "feature_form.html": ("编辑特征帮助", "页面会在当前浏览器自动保存未提交草稿。每次正式保存都会生成规则版本；编辑已有规则后，系统按新版本重新检查已完成报告，旧版本证据仍保留。"),
     "feature_detail.html": ("特征详情帮助", "此页展示特征的当前规则、来源复核和关联日志。创建者可按当前规则重新检查历史报告；删除特征不会删除已上传日志。"),
     "feature_assist.html": ("AI 复核帮助", "上传来源日志后，系统会从实际日志重新提取每一条规则条件的文件、行号和片段，再由 AI 提出确认问题。最终判断由维护人员完成。"),
     "knowledge_cases.html": ("案例库帮助", "案例可新建，也可导入已有的 Word、PowerPoint、Markdown 或文本资料后再校对发布。案例正文会参与智能问答检索，并可被特征规则引用。"),
@@ -86,13 +90,15 @@ HELP = {
     "knowledge_case_form.html": ("发布案例帮助", "正文默认使用富文本，可随时切换为 Markdown；两种模式都可使用上方格式工具栏。Markdown 中选中文本后可点“粗体”，或按 ⌘/Ctrl+B 插入/取消加粗；Markdown 模式还提供语法说明和实时预览。也可先导入已有文档生成草稿。两种方式均会安全沉淀为 Markdown，便于检索、问答与长期留存。可选上传一份或多份关联日志，每份日志会生成独立报告并与该案例关联。"),
     "knowledge_case_detail.html": ("案例详情帮助", "可阅读案例正文、查看关联日志报告、原始导入资料及被引用的特征。案例内容会作为内部知识补充给智能问答。"),
     "requests.html": ("需求板帮助", "所有登录用户都可查看和提交需求。团队按设定节奏集中评审，状态与评审意见会在需求详情中保留。"),
-    "request_form.html": ("提交需求帮助", "请说明希望解决的痛点、使用场景和预期价值。需求会先进入待评审队列，避免直接承诺实现时间。"),
+    "request_form.html": ("提交需求帮助", "请说明希望解决的痛点、使用场景和预期价值。未提交内容会在当前浏览器自动保存；正式提交后进入待评审队列。"),
     "request_detail.html": ("需求详情帮助", "查看需求完整描述、当前状态与评审时间线。仅配置的评审人可以改变状态或添加评审意见。"),
     "ask.html": ("智能问答帮助", "问题会先从本地特征库检索相关知识，再由已配置的 LLM 流式生成建议。不要在问题中粘贴密码、密钥或未脱敏的敏感日志。"),
     "tools.html": ("工具中心帮助", "此模块保留原有的内部工具分发功能。工具作者可持续发布版本，历史版本和下载计数都会保留。"),
     "tool_form.html": ("发布工具帮助", "填写工具说明、版本和附件。请只上传已通过公司安全审核的内部工具。"),
     "tool_detail.html": ("工具详情帮助", "可下载各版本、查看历史、提交使用建议；仅工具作者可修改介绍或发布新版本。"),
     "tool_edit.html": ("修改工具帮助", "此页仅更新工具介绍或 Logo，不会删除历史版本或下载记录。"),
+    "welink.html": ("重大问题巡检帮助", "在此配置需要关注的 WeLink 群、个人消息和报告接收方。网页不直接执行 CLI；只有受控内网桥接服务才能读取或发送 WeLink 消息。"),
+    "model_settings.html": ("模型配置帮助", "管理员可在已由服务器环境配置好的模型档案之间切换。页面不会显示、保存或修改任何 API Key。"),
     "auth.html": ("账号帮助", "请使用内部团队约定的用户名注册。生产部署前建议接入公司统一身份认证。"),
 }
 
@@ -285,6 +291,9 @@ def redirect(path: str):
     return RedirectResponse(path, status_code=303)
 
 
+register_welink_routes(app, page, require_user, redirect, llm_provider=lambda prompt, fallback: llm_stream(prompt, fallback, include_reasoning=True))
+
+
 def save_upload(upload: UploadFile, folder: str) -> tuple[Path, str]:
     safe_name = Path(upload.filename or "upload.bin").name
     target = UPLOAD_DIR / folder / f"{secrets.token_hex(12)}_{safe_name}"
@@ -391,7 +400,10 @@ def create_analysis(db, user_id: int, stored: Path, original_name: str):
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
-    require_user(request)
+    # The dashboard remains protected, but the browser entry point should lead
+    # an anonymous colleague to the login page instead of showing a raw 401.
+    if not current_user(request):
+        return redirect("/login")
     db = connection()
     stats = {
         "uploaded": db.execute("SELECT COUNT(*) FROM analyses").fetchone()[0],
@@ -485,12 +497,55 @@ def analyze_logs(request: Request, bundles: list[UploadFile] = File(...)):
 
 
 @app.get("/reports")
-def reports(request: Request):
+def reports(request: Request, q: str = "", status: str = "all", hit: str = "all", page_no: int = 1):
     require_user(request)
+    q = q.strip()[:120]
+    status = status if status in {"completed", "failed"} else "all"
+    hit = hit if hit in {"matched", "unmatched"} else "all"
+    where, params = [], []
+    if q:
+        where.append("(a.original_name LIKE ? OR u.username LIKE ?)")
+        value = f"%{q}%"
+        params.extend((value, value))
+    if status != "all":
+        where.append("a.status=?")
+        params.append(status)
+    if hit == "matched":
+        where.append("a.match_count>0")
+    elif hit == "unmatched":
+        where.append("a.match_count=0")
+    where_sql = f" WHERE {' AND '.join(where)}" if where else ""
     db = connection()
-    items = db.execute("SELECT a.*,u.username FROM analyses a JOIN users u ON u.id=a.created_by ORDER BY a.created_at DESC").fetchall()
+    total_count = db.execute(
+        "SELECT COUNT(*) FROM analyses a JOIN users u ON u.id=a.created_by" + where_sql,
+        params,
+    ).fetchone()[0]
+    per_page = 20
+    total_pages = max(1, (total_count + per_page - 1) // per_page)
+    page_no = min(max(page_no, 1), total_pages)
+    items = db.execute(
+        """SELECT a.*,u.username FROM analyses a JOIN users u ON u.id=a.created_by"""
+        + where_sql
+        + " ORDER BY a.created_at DESC,a.id DESC LIMIT ? OFFSET ?",
+        [*params, per_page, (page_no - 1) * per_page],
+    ).fetchall()
     db.close()
-    return page(request, "reports.html", reports=items)
+    query = {"q": q, "status": status, "hit": hit}
+    previous_url = None if page_no <= 1 else "/reports?" + urllib.parse.urlencode({**query, "page_no": page_no - 1})
+    next_url = None if page_no >= total_pages else "/reports?" + urllib.parse.urlencode({**query, "page_no": page_no + 1})
+    return page(
+        request,
+        "reports.html",
+        reports=items,
+        q=q,
+        status=status,
+        hit=hit,
+        total_count=total_count,
+        page_no=page_no,
+        total_pages=total_pages,
+        previous_url=previous_url,
+        next_url=next_url,
+    )
 
 
 @app.get("/cases")
@@ -511,10 +566,25 @@ def list_knowledge_cases(request: Request, q: str = ""):
     return page(request, "knowledge_cases.html", knowledge_cases=items, q=q)
 
 
+def contextual_source_report(db, user, report_id: int):
+    if not report_id:
+        return None
+    report = db.execute(
+        "SELECT id,original_name,status,created_by,created_at FROM analyses WHERE id=?",
+        (report_id,),
+    ).fetchone()
+    if not report:
+        raise HTTPException(404, "来源报告不存在")
+    if not can_access_report_source(user, report):
+        raise HTTPException(403, "仅日志上传者、审核者或管理员可以从该报告沉淀知识")
+    return report
+
+
 @app.get("/cases/new")
-def new_knowledge_case(request: Request):
-    require_user(request)
-    return page(request, "knowledge_case_form.html", knowledge_case=None, imported_document=None)
+def new_knowledge_case(request: Request, report_id: int = 0):
+    user = require_user(request)
+    db = connection(); source_report = contextual_source_report(db, user, report_id); db.close()
+    return page(request, "knowledge_case_form.html", knowledge_case=None, imported_document=None, source_report=source_report)
 
 
 def draft_case_import(db, import_id: Optional[int], user_id: int):
@@ -616,17 +686,26 @@ def auto_link_knowledge_case_features(db, knowledge_case_id: int, user_id: int, 
 
 
 @app.post("/cases")
-def create_knowledge_case(request: Request, title: str = Form(), summary: str = Form(""), body: str = Form(""), import_id: Optional[int] = Form(None), bundles: list[UploadFile] = File([])):
+def create_knowledge_case(request: Request, title: str = Form(), summary: str = Form(""), body: str = Form(""), import_id: Optional[int] = Form(None), report_id: int = Form(0), bundles: list[UploadFile] = File([])):
     user = require_user(request)
+    report_id = report_id if isinstance(report_id, int) else 0
     selected = [bundle for bundle in bundles if bundle.filename]
-    if not title.strip() or (not body.strip() and not selected):
-        db = connection(); imported_document = draft_case_import(db, import_id, user["id"]); db.close()
-        return page(request, "knowledge_case_form.html", knowledge_case={"title": title, "summary": summary, "body": body}, imported_document=imported_document, error="请填写案例标题，并至少提供案例正文或一份日志。")
     db = connection()
+    source_report = contextual_source_report(db, user, report_id)
     imported_document = draft_case_import(db, import_id, user["id"])
+    if not title.strip() or (not body.strip() and not selected and not source_report):
+        db.close()
+        return page(
+            request,
+            "knowledge_case_form.html",
+            knowledge_case={"title": title, "summary": summary, "body": body},
+            imported_document=imported_document,
+            source_report=source_report,
+            error="请填写案例标题，并至少提供案例正文、来源报告或一份日志。",
+        )
     if import_id and not imported_document:
         db.close()
-        return page(request, "knowledge_case_form.html", knowledge_case={"title": title, "summary": summary, "body": body}, imported_document=None, error="导入草稿不存在、已发布，或不属于当前账号。请重新导入资料。")
+        return page(request, "knowledge_case_form.html", knowledge_case={"title": title, "summary": summary, "body": body}, imported_document=None, source_report=source_report, error="导入草稿不存在、已发布，或不属于当前账号。请重新导入资料。")
     knowledge_case_id = db.execute(
         "INSERT INTO knowledge_cases (title,summary,body,created_by) VALUES (?,?,?,?)",
         (title.strip(), summary.strip(), body.strip(), user["id"]),
@@ -634,6 +713,12 @@ def create_knowledge_case(request: Request, title: str = Form(), summary: str = 
     if imported_document:
         db.execute("UPDATE case_imports SET knowledge_case_id=?,extracted_body='' WHERE id=?", (knowledge_case_id, imported_document["id"]))
     analysis_ids = []
+    if source_report:
+        db.execute(
+            "INSERT OR IGNORE INTO case_log_links (knowledge_case_id,analysis_id,linked_by) VALUES (?,?,?)",
+            (knowledge_case_id, source_report["id"], user["id"]),
+        )
+        analysis_ids.append(source_report["id"])
     for bundle in selected:
         stored, original_name = save_upload(bundle, "logs")
         report = create_analysis(db, user["id"], stored, original_name)
@@ -882,14 +967,55 @@ def report_prompt(report, features, skill_findings):
     }
 
 
-def llm_stream(prompt: str, fallback: str) -> Iterator[str]:
-    key = os.getenv("LLM_API_KEY")
+def llm_profiles():
+    """Expose non-secret model metadata; keys remain environment variables only."""
+    fallback = [{
+        "id": "default", "name": "默认模型", "base_url": os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
+        "model": os.getenv("LLM_MODEL", "gpt-4.1-mini"), "api_key_env": "LLM_API_KEY",
+    }]
+    raw = os.getenv("LLM_PROFILES_JSON", "").strip()
+    if not raw:
+        return fallback
+    try:
+        candidates = json.loads(raw)
+    except json.JSONDecodeError:
+        return fallback
+    profiles = []
+    for item in candidates if isinstance(candidates, list) else []:
+        if not isinstance(item, dict):
+            continue
+        identifier = str(item.get("id", "")).strip()
+        base_url = str(item.get("base_url", "")).strip()
+        model = str(item.get("model", "")).strip()
+        key_env = str(item.get("api_key_env", "")).strip()
+        if identifier and base_url and model and key_env and key_env.replace("_", "").isalnum():
+            profiles.append({"id": identifier[:60], "name": str(item.get("name") or identifier)[:100], "base_url": base_url[:500], "model": model[:160], "api_key_env": key_env[:100]})
+    return profiles or fallback
+
+
+def active_llm_profile():
+    profiles = llm_profiles()
+    db = connection()
+    active_id = get_setting(db, "active_llm_profile", os.getenv("LLM_ACTIVE_PROFILE", profiles[0]["id"]).strip() or profiles[0]["id"])
+    db.close()
+    profile = next((item for item in profiles if item["id"] == active_id), profiles[0])
+    return {**profile, "api_key": os.getenv(profile["api_key_env"], "")}
+
+
+REASONING_START = "[[BMC_REASONING_START]]"
+REASONING_END = "[[BMC_REASONING_END]]"
+
+
+def llm_stream(prompt: str, fallback: str, include_reasoning: bool = False) -> Iterator[str]:
+    profile = active_llm_profile()
+    key = profile["api_key"]
     if not key:
-        yield "未配置 LLM API Key，当前展示基于本地特征库的建议：\n\n"
+        yield f"当前模型档案“{profile['name']}”未配置服务器 API Key，展示基于本地特征库的建议：\n\n"
         yield fallback
         return
-    body = json.dumps({"model": os.getenv("LLM_MODEL", "gpt-4.1-mini"), "stream": True, "temperature": 0.2, "messages": [{"role": "system", "content": "你是服务器硬件维护专家。使用中文，以 Markdown 输出；使用二级或三级标题、项目符号和加粗重点，按风险、证据、排查步骤、处置建议的结构回答；不要编造未提供的日志事实。"}, {"role": "user", "content": prompt}]}, ensure_ascii=False).encode()
-    request = urllib.request.Request(os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/") + "/chat/completions", data=body, headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
+    body = json.dumps({"model": profile["model"], "stream": True, "temperature": 0.2, "messages": [{"role": "system", "content": "你是服务器硬件维护专家。使用中文，以 Markdown 输出；使用二级或三级标题、项目符号和加粗重点，按风险、证据、排查步骤、处置建议的结构回答；不要编造未提供的日志事实。"}, {"role": "user", "content": prompt}]}, ensure_ascii=False).encode()
+    request = urllib.request.Request(profile["base_url"].rstrip("/") + "/chat/completions", data=body, headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
+    reasoning_open = False
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
             for raw in response:
@@ -898,12 +1024,49 @@ def llm_stream(prompt: str, fallback: str) -> Iterator[str]:
                 payload = line[5:].strip()
                 if payload == "[DONE]": break
                 try:
-                    delta = json.loads(payload)["choices"][0].get("delta", {}).get("content", "")
-                    if delta: yield delta
+                    delta = json.loads(payload)["choices"][0].get("delta", {})
+                    reasoning = delta.get("reasoning_content") or delta.get("reasoning") or ""
+                    content = delta.get("content") or ""
+                    if include_reasoning and isinstance(reasoning, str) and reasoning:
+                        if not reasoning_open:
+                            reasoning_open = True
+                            yield REASONING_START
+                        yield reasoning
+                    if isinstance(content, str) and content:
+                        if reasoning_open:
+                            reasoning_open = False
+                            yield REASONING_END
+                        yield content
                 except (KeyError, IndexError, json.JSONDecodeError):
                     continue
+        if reasoning_open:
+            yield REASONING_END
     except (urllib.error.URLError, TimeoutError) as error:
+        if reasoning_open:
+            yield REASONING_END
         yield f"模型服务暂不可用：{error}"
+
+
+@app.get("/settings/models")
+def model_settings(request: Request):
+    user = require_user(request)
+    if not has_role(user, "admin"):
+        raise HTTPException(403, "只有管理员可以管理模型档案")
+    active = active_llm_profile()
+    profiles = [{key: value for key, value in item.items() if key != "api_key_env"} | {"configured": bool(os.getenv(item["api_key_env"], ""))} for item in llm_profiles()]
+    return page(request, "model_settings.html", profiles=profiles, active_id=active["id"])
+
+
+@app.post("/settings/models")
+def change_model_profile(request: Request, profile_id: str = Form()):
+    user = require_user(request)
+    if not has_role(user, "admin"):
+        raise HTTPException(403, "只有管理员可以管理模型档案")
+    profile = next((item for item in llm_profiles() if item["id"] == profile_id), None)
+    if not profile:
+        raise HTTPException(400, "模型档案不存在")
+    db = connection(); set_setting(db, "active_llm_profile", profile["id"], user["id"]); db.commit(); db.close()
+    return redirect("/settings/models?notice=saved")
 
 
 @app.get("/reports/{analysis_id}/llm/stream")
@@ -931,10 +1094,13 @@ def list_features(request: Request, q: str = ""):
 
 
 @app.get("/features/new")
-def new_feature(request: Request):
-    require_user(request)
-    db = connection(); knowledge_cases = db.execute("SELECT id,title FROM knowledge_cases ORDER BY updated_at DESC LIMIT 100").fetchall(); db.close()
-    return page(request, "feature_form.html", feature=None, conditions=[], knowledge_cases=knowledge_cases, linked_case_ids=[])
+def new_feature(request: Request, report_id: int = 0):
+    user = require_user(request)
+    db = connection()
+    source_report = contextual_source_report(db, user, report_id)
+    knowledge_cases = db.execute("SELECT id,title FROM knowledge_cases ORDER BY updated_at DESC LIMIT 100").fetchall()
+    db.close()
+    return page(request, "feature_form.html", feature=None, conditions=[], knowledge_cases=knowledge_cases, linked_case_ids=[], source_report=source_report)
 
 
 def validate_feature(title, description, diagnosis, solution, patterns, expressions, flags):
@@ -1069,12 +1235,25 @@ def attach_feature_source_logs(db, feature_id: int, user_id: int, uploads: list[
 
 
 @app.post("/features")
-def create_feature(request: Request, title: str = Form(), description: str = Form(), diagnosis: str = Form(), solution: str = Form(), keywords: str = Form(""), tags: str = Form(""), severity: str = Form("medium"), match_mode: str = Form("all"), file_patterns: list[str] = Form([]), expressions: list[str] = Form([]), regex_flags: list[str] = Form([]), knowledge_case_ids: list[int] = Form([]), source_bundles: list[UploadFile] = File([])):
-    user = require_user(request); conditions = validate_feature(title, description, diagnosis, solution, file_patterns, expressions, regex_flags)
+def create_feature(request: Request, title: str = Form(), description: str = Form(), diagnosis: str = Form(), solution: str = Form(), keywords: str = Form(""), tags: str = Form(""), severity: str = Form("medium"), match_mode: str = Form("all"), file_patterns: list[str] = Form([]), expressions: list[str] = Form([]), regex_flags: list[str] = Form([]), knowledge_case_ids: list[int] = Form([]), report_id: int = Form(0), source_bundles: list[UploadFile] = File([])):
+    user = require_user(request); report_id = report_id if isinstance(report_id, int) else 0
+    conditions = validate_feature(title, description, diagnosis, solution, file_patterns, expressions, regex_flags)
     if not conditions:
-        db = connection(); knowledge_cases = db.execute("SELECT id,title FROM knowledge_cases ORDER BY updated_at DESC LIMIT 100").fetchall(); db.close()
-        return page(request, "feature_form.html", feature=None, conditions=[], knowledge_cases=knowledge_cases, linked_case_ids=knowledge_case_ids, error="请完整填写问题信息，并至少提供一条有效日志条件。")
-    db = connection(); feature_id, _ = save_feature(db, None, title, description, diagnosis, solution, keywords, tags, severity if severity in ("critical", "high", "medium", "low") else "medium", "any" if match_mode == "any" else "all", conditions, user["id"], knowledge_case_ids); analysis_ids = attach_feature_source_logs(db, feature_id, user["id"], source_bundles); db.commit(); db.close()
+        db = connection()
+        source_report = contextual_source_report(db, user, report_id)
+        knowledge_cases = db.execute("SELECT id,title FROM knowledge_cases ORDER BY updated_at DESC LIMIT 100").fetchall()
+        db.close()
+        return page(request, "feature_form.html", feature=None, conditions=[], knowledge_cases=knowledge_cases, linked_case_ids=knowledge_case_ids, source_report=source_report, error="请完整填写问题信息，并至少提供一条有效日志条件。")
+    db = connection()
+    source_report = contextual_source_report(db, user, report_id)
+    feature_id, _ = save_feature(db, None, title, description, diagnosis, solution, keywords, tags, severity if severity in ("critical", "high", "medium", "low") else "medium", "any" if match_mode == "any" else "all", conditions, user["id"], knowledge_case_ids)
+    if source_report:
+        db.execute(
+            "INSERT OR IGNORE INTO feature_log_links (case_id,analysis_id,relation_type,linked_by) VALUES (?,?,?,?)",
+            (feature_id, source_report["id"], "manual", user["id"]),
+        )
+    analysis_ids = attach_feature_source_logs(db, feature_id, user["id"], source_bundles)
+    db.commit(); db.close()
     return redirect(f"/features/{feature_id}/assist" if analysis_ids else f"/features/{feature_id}")
 
 
@@ -1274,16 +1453,63 @@ def related_knowledge(question: str):
 
 
 @app.get("/ask")
-def ask_form(request: Request):
+def ask_form(request: Request, conversation: int = 0, report_id: int = 0):
     user = require_user(request)
     db = connection()
-    history = db.execute("SELECT role,content,created_at FROM chat_messages WHERE user_id=? ORDER BY id ASC LIMIT 100", (user["id"],)).fetchall()
+    context_report = None
+    if report_id:
+        context_report = db.execute(
+            "SELECT id,original_name,status,created_at FROM analyses WHERE id=?",
+            (report_id,),
+        ).fetchone()
+        if not context_report:
+            db.close()
+            raise HTTPException(404, "报告不存在")
+    active_conversation = current_conversation(db, user["id"], "general", conversation or None)
+    history = db.execute(
+        "SELECT role,content,created_at FROM chat_messages WHERE user_id=? AND conversation_id=? ORDER BY id ASC LIMIT 100",
+        (user["id"], active_conversation["id"]),
+    ).fetchall()
+    conversations = conversation_list(db, user["id"], "general")
     db.close()
-    return page(request, "ask.html", history=history)
+    return page(
+        request,
+        "ask.html",
+        history=history,
+        conversations=conversations,
+        active_conversation=active_conversation,
+        context_report=context_report,
+        initial_question=(f"请分析日志报告 #{context_report['id']}（{context_report['original_name']}），总结主要风险、证据、建议排查步骤和下一步行动。" if context_report else ""),
+        notice="对话名称已更新。" if request.query_params.get("notice") == "conversation_renamed" else None,
+    )
 
 
-@app.get("/ask/stream")
-def ask_stream(request: Request, question: str = ""):
+@app.post("/ask/conversations")
+def new_ask_conversation(request: Request):
+    user = require_user(request)
+    db = connection()
+    conversation_id = create_conversation(db, user["id"], "general")
+    db.close()
+    return redirect(f"/ask?conversation={conversation_id}")
+
+
+@app.post("/ask/conversations/{conversation_id}/rename")
+def rename_ask_conversation(request: Request, conversation_id: int, title: str = Form("")):
+    user = require_user(request)
+    db = connection()
+    try:
+        renamed = rename_conversation(db, user["id"], conversation_id, "general", title)
+    except ValueError as error:
+        db.close()
+        raise HTTPException(400, str(error))
+    db.close()
+    if not renamed:
+        raise HTTPException(404, "对话不存在")
+    return redirect(f"/ask?conversation={conversation_id}&notice=conversation_renamed")
+
+
+@app.post("/ask/stream")
+def ask_stream(request: Request, question: str = Form(""), conversation_id: int = Form(0)):
     user = require_user(request)
     if not question.strip(): raise HTTPException(400, "请输入问题")
     features, knowledge_cases = related_knowledge(question)
@@ -1292,17 +1518,35 @@ def ask_stream(request: Request, question: str = ""):
     fallback_parts += [f"### 案例：{item['title']}\n\n{item['summary'] or item['body'][:800]}" for item in knowledge_cases]
     fallback = "\n\n".join(fallback_parts) if fallback_parts else "## 检索结果\n\n未找到直接匹配的内部特征或案例。请补充错误码、部件名称或日志关键字后再试。"
     db = connection()
-    db.execute("INSERT INTO chat_messages (user_id,role,content) VALUES (?,?,?)", (user["id"], "user", question.strip()))
+    conversation = current_conversation(db, user["id"], "general", conversation_id or None)
+    touch_conversation(db, conversation["id"], question)
+    db.execute(
+        "INSERT INTO chat_messages (user_id,conversation_id,role,content) VALUES (?,?,?,?)",
+        (user["id"], conversation["id"], "user", question.strip()),
+    )
     db.commit(); db.close()
 
     def record_response():
         chunks = []
-        for chunk in llm_stream(prompt, fallback):
-            chunks.append(chunk)
-            yield chunk
-        db = connection()
-        db.execute("INSERT INTO chat_messages (user_id,role,content) VALUES (?,?,?)", (user["id"], "assistant", "".join(chunks)))
-        db.commit(); db.close()
+        completed = False
+        try:
+            for chunk in llm_stream(prompt, fallback, include_reasoning=True):
+                chunks.append(chunk)
+                yield chunk
+            completed = True
+        finally:
+            content = "".join(chunks)
+            if content:
+                if not completed:
+                    if REASONING_START in content and REASONING_END not in content:
+                        content += REASONING_END
+                    content += "\n\n> 回答生成已中断。"
+                db = connection()
+                db.execute(
+                    "INSERT INTO chat_messages (user_id,conversation_id,role,content) VALUES (?,?,?,?)",
+                    (user["id"], conversation["id"], "assistant", content),
+                )
+                db.commit(); db.close()
 
     return StreamingResponse(record_response(), media_type="text/plain; charset=utf-8", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 

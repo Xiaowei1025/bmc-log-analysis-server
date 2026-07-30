@@ -1,0 +1,51 @@
+<div class="chat-toolbar">
+  <select
+    class="conversation-select"
+    aria-label="切换历史对话"
+    data-conversation-switch
+    data-url-template="{{ conversation_switch_template }}"
+  >
+    {% for conversation in conversations %}
+    <option value="{{ conversation.id }}" {{ conversation.id == active_conversation.id and 'selected' or '' }}>{{ conversation.title }}</option>
+    {% endfor %}
+  </select>
+  <button
+    class="button conversation-rename-trigger"
+    type="button"
+    aria-controls="conversation-rename-dialog"
+    data-conversation-rename-open
+  >重命名</button>
+  <form method="post" action="{{ conversation_new_action }}" data-pending-label="创建中…">
+    {{ conversation_csrf_markup }}
+    <button class="button" type="submit">＋ 新对话</button>
+  </form>
+</div>
+
+<dialog id="conversation-rename-dialog" class="conversation-rename-dialog glass" aria-labelledby="conversation-rename-title">
+  <form method="post" action="{{ conversation_rename_action }}" data-pending-label="保存中…">
+    {{ conversation_csrf_markup }}
+    <div class="dialog-head">
+      <div>
+        <p class="eyebrow">历史对话</p>
+        <h2 id="conversation-rename-title">修改对话名称</h2>
+      </div>
+      <button class="icon-button" type="button" aria-label="取消修改对话名称" data-conversation-rename-cancel>×</button>
+    </div>
+    <label>
+      对话名称
+      <input
+        name="title"
+        value="{{ active_conversation.title }}"
+        maxlength="60"
+        required
+        autocomplete="off"
+        aria-describedby="conversation-rename-hint"
+      >
+    </label>
+    <p class="hint" id="conversation-rename-hint">建议使用“设备或问题 + 处理主题”，例如“Node-03 风扇告警复盘”。最多 60 个字符。</p>
+    <div class="conversation-rename-actions">
+      <button class="button" type="button" data-conversation-rename-cancel>取消</button>
+      <button class="button primary" type="submit">保存名称</button>
+    </div>
+  </form>
+</dialog>

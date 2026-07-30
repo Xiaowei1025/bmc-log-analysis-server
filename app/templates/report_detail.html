@@ -15,6 +15,20 @@
 </section>
 {% if report.status == 'completed' %}
 {% if analysis_summary.skill_warning %}<section class="notice error">{{ analysis_summary.skill_warning }}</section>{% endif %}
+<section class="workflow-actions glass" aria-label="报告后续操作">
+  <div>
+    <p class="eyebrow">下一步处置</p>
+    <h2>从这份报告继续完成闭环</h2>
+    <p>不用返回其他列表重新查找，本报告会作为可追溯上下文带入下一步。</p>
+  </div>
+  <div class="workflow-action-buttons">
+    <a class="button primary" href="/ask?report_id={{ report.id }}">询问 AI</a>
+    {% if can_link_features %}
+    <a class="button" href="/features/new?report_id={{ report.id }}">沉淀为特征</a>
+    <a class="button" href="/cases/new?report_id={{ report.id }}">沉淀为案例</a>
+    {% endif %}
+  </div>
+</section>
 <section class="analysis-layout">
   <div class="stack">
     <article class="panel glass">

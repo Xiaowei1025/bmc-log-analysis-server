@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}模型配置 · 硬件运维工作台{% endblock %}{% block content %}
+<section class="page-heading"><div><p class="eyebrow">管理员设置</p><h1>AI 模型档案</h1><p>切换会立即影响后续流式问答与报告分析。页面不显示、不保存也不能修改 API Key。</p></div></section>
+{% if request.query_params.get('notice') %}<div class="notice success">已切换活动模型档案。</div>{% endif %}
+<section class="panel glass"><form method="post" action="/settings/models" class="form">{{ csrf_input(request) }}{% for profile in profiles %}<label class="table-row"><span><input type="radio" name="profile_id" value="{{ profile.id }}" {{ profile.id == active_id and 'checked' or '' }}><strong>{{ profile.name }}</strong><small>{{ profile.model }} · {{ profile.base_url }}</small></span><span class="status {{ profile.configured and 'completed' or 'failed' }}">{{ profile.configured and '密钥已配置' or '未配置密钥' }}</span></label>{% endfor %}<button class="button primary">启用选中的模型</button></form></section>
+<section class="panel glass result-section"><h2>服务器配置方式</h2><p class="hint">在服务器 <code>.env</code> 中配置 <code>LLM_PROFILES_JSON</code> 与各档案对应的环境变量。数据库只保存当前选中的档案 ID；如需更换 Key，请修改服务器环境文件后重启服务。</p></section>
+{% endblock %}

@@ -2,7 +2,7 @@ services:
   bmc-hub:
     build: .
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       APP_SECRET: ${APP_SECRET:?set APP_SECRET in .env}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-200}
@@ -10,6 +10,13 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
       LLM_MODEL: ${LLM_MODEL:-gpt-4.1-mini}
+      LLM_PROFILES_JSON: ${LLM_PROFILES_JSON:-}
+      LLM_ACTIVE_PROFILE: ${LLM_ACTIVE_PROFILE:-default}
+      LLM_DEEPSEEK_FLASH_KEY: ${LLM_DEEPSEEK_FLASH_KEY:-}
+      LLM_DEEPSEEK_PRO_KEY: ${LLM_DEEPSEEK_PRO_KEY:-}
+      WELINK_AGENT_BRIDGE_URL: ${WELINK_AGENT_BRIDGE_URL:-}
+      WELINK_AGENT_BRIDGE_TOKEN: ${WELINK_AGENT_BRIDGE_TOKEN:-}
+      WELINK_DEFAULT_MODE: ${WELINK_DEFAULT_MODE:-demo}
     volumes:
       - ./data:/srv/bmc-hub/data
       - ./uploads:/srv/bmc-hub/uploads

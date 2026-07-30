@@ -1,0 +1,77 @@
+.draft-status{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-6px 0 14px;padding:9px 11px;border:1px solid rgba(54,118,203,.18);border-radius:12px;background:rgba(50,118,213,.07);color:var(--muted);font-size:12px}
+.draft-status .text-button{padding:4px 7px;color:var(--blue)}
+.context-source,.workflow-actions{display:flex;align-items:center;justify-content:space-between;gap:24px;margin:0 0 18px;padding:18px 20px;border-radius:20px}
+.context-source h2,.workflow-actions h2{margin-bottom:4px}
+.context-source p:last-child,.workflow-actions p:last-child{margin:0;color:var(--muted)}
+.workflow-action-buttons{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.chat-context{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:16px 0 0;padding:10px 12px;border:1px solid rgba(53,113,198,.18);border-radius:13px;background:rgba(53,113,198,.08);font-size:12px}
+.chat-context span,.chat-context strong{display:block}
+.chat-context span{color:var(--muted)}
+.chat-context a{color:var(--blue);white-space:nowrap}
+
+.upload-card{overflow:hidden}
+.upload-drop-zone{position:relative;min-height:230px;padding:28px;border-width:2px;transition:border-color .18s ease,background .18s ease,transform .18s ease}
+.upload-drop-zone:hover,.upload-drop-zone.is-dragging{border-color:var(--blue);background:rgba(49,121,224,.09);transform:translateY(-1px)}
+.upload-drop-zone.is-processing{pointer-events:none;opacity:.58}
+.file-input-hidden{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;white-space:nowrap!important}
+.upload-picker{margin-top:10px;box-shadow:0 9px 22px rgba(40,95,176,.16)}
+.upload-selection{margin:16px 0;padding:16px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.22)}
+.upload-selection-head,.upload-submit-row,.upload-file-list li{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.upload-selection-head small,.upload-file-list small{display:block;color:var(--muted)}
+.upload-file-list{display:grid;gap:8px;margin:14px 0 0;padding:0;list-style:none}
+.upload-file-list li{padding:11px 12px;border:1px solid rgba(78,111,161,.14);border-radius:12px;background:rgba(255,255,255,.24)}
+.upload-file-list li>div{min-width:0}
+.upload-file-list strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.upload-file-list li.invalid{border-color:rgba(230,75,95,.34);background:rgba(230,75,95,.07)}
+.upload-error{margin:12px 0;padding:11px 13px;border-radius:12px;background:rgba(230,75,95,.12);color:var(--critical)}
+.upload-processing{margin:14px 0;padding:13px;border:1px solid rgba(42,111,207,.2);border-radius:14px;background:rgba(42,111,207,.08)}
+.upload-processing strong,.upload-processing span{display:block}
+.upload-processing span{color:var(--muted);font-size:12px}
+.indeterminate-progress{height:6px;margin-top:10px;overflow:hidden;border-radius:99px;background:rgba(77,108,158,.14)}
+.indeterminate-progress span{width:42%;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--blue),var(--violet));animation:upload-progress 1.25s ease-in-out infinite}
+@keyframes upload-progress{from{transform:translateX(-110%)}to{transform:translateX(350%)}}
+.upload-submit-row{margin-top:16px}
+.upload-submit-row p{margin:0;color:var(--muted);font-size:12px}
+.upload-submit-row .button{min-width:170px;min-height:44px}
+
+.report-filter{display:grid;grid-template-columns:minmax(260px,1.5fr) minmax(150px,.65fr) minmax(150px,.65fr) auto;gap:12px;align-items:end;margin-bottom:14px;padding:16px;border-radius:18px}
+.report-filter label{display:grid;gap:5px;color:var(--muted);font-size:12px;font-weight:700}
+.report-filter input,.report-filter select{width:100%;min-height:43px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.46);color:var(--ink);padding:9px 11px;font:inherit}
+.report-filter-actions{display:flex;gap:7px}
+.report-filter-actions .button{min-height:43px}
+.result-summary{display:flex;justify-content:space-between;gap:12px;margin:0 4px 10px;color:var(--muted);font-size:12px}
+.pagination{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;margin-top:16px;overflow:visible}
+.pagination>:last-child{justify-self:end}
+.pagination>span{color:var(--muted);font-size:12px}
+
+.empty-state{grid-column:1/-1;width:100%;padding:38px 28px;border-radius:24px;text-align:center}
+.empty-state.embedded{border:0;border-radius:0;background:transparent;box-shadow:none}
+.empty-state-icon{display:grid;place-items:center;width:48px;height:48px;margin:0 auto 14px;border-radius:16px;background:linear-gradient(145deg,rgba(38,116,223,.16),rgba(112,89,223,.18));color:var(--blue);font-size:22px;box-shadow:inset 0 1px rgba(255,255,255,.6)}
+.empty-state h2{margin-bottom:7px}
+.empty-state>p:not(.eyebrow){max-width:570px;margin:0 auto 17px;color:var(--muted)}
+.empty-state>div{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+
+html[data-theme=dark] .upload-selection,html[data-theme=dark] .upload-file-list li,html[data-theme=dark] .report-filter input,html[data-theme=dark] .report-filter select{background:rgba(8,20,37,.62)}
+@media(max-width:900px){
+  .report-filter{grid-template-columns:1fr 1fr}
+  .report-filter-search{grid-column:1/-1}
+  .report-filter-actions{justify-content:flex-end}
+}
+@media(max-width:700px){
+  .context-source,.workflow-actions,.upload-submit-row{align-items:flex-start;flex-direction:column}
+  .workflow-action-buttons,.upload-submit-row .button{width:100%}
+  .workflow-action-buttons .button{flex:1}
+  .report-filter{grid-template-columns:1fr}
+  .report-filter-search{grid-column:auto}
+  .report-filter-actions{justify-content:stretch}
+  .report-filter-actions .button{flex:1}
+  .result-summary{align-items:flex-start;flex-direction:column}
+  .upload-selection-head,.upload-file-list li{align-items:flex-start}
+  .upload-drop-zone{min-height:210px;padding:24px 16px}
+}
+@media(max-width:520px){
+  .draft-status,.chat-context{align-items:flex-start;flex-direction:column}
+  .pagination{grid-template-columns:1fr 1fr}
+  .pagination>span{grid-column:1/-1;grid-row:1;text-align:center}
+}
+@media(prefers-reduced-motion:reduce){.indeterminate-progress span{animation:none;width:100%}}
