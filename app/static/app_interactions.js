@@ -76,11 +76,47 @@
       if (!button) return;
       form.dataset.submitting = 'true';
       form.setAttribute('aria-busy', 'true');
+      // A named submit button contributes its name/value to FormData. Once the
+      // button is disabled for the pending state, browsers omit it from the
+      // native form submission. Preserve that value with a hidden proxy so
+      // mode switches and other action buttons do not become 422 responses.
+      if (button.name && button.value) {
+        const proxy = document.createElement('input');
+        proxy.type = 'hidden';
+        proxy.name = button.name;
+        proxy.value = button.value;
+        proxy.dataset.submitterProxy = 'true';
+        form.append(proxy);
+      }
       button.dataset.idleLabel = button.textContent;
       button.textContent = form.dataset.pendingLabel || '正在处理…';
       button.disabled = true;
       button.setAttribute('aria-busy', 'true');
     });
+  });
+
+  document.querySelectorAll('form[data-bulk-delete]').forEach(form => {
+    const kind = form.dataset.bulkDelete;
+    const hidden = form.querySelector(`[data-bulk-ids="${kind}"]`);
+    const submit = form.querySelector('[data-bulk-submit]');
+    const items = [...document.querySelectorAll(`[data-bulk-item="${kind}"]`)];
+    const selectAll = document.querySelector(`[data-bulk-select-all="${kind}"]`);
+    const sync = () => {
+      const selected = items.filter(item => item.checked).map(item => item.value);
+      if (hidden) hidden.value = selected.join(',');
+      if (submit) {
+        submit.disabled = selected.length === 0;
+        submit.textContent = selected.length ? `删除选中（${selected.length}）` : '删除选中';
+      }
+      if (selectAll) selectAll.textContent = items.length && selected.length === items.length ? '取消全选' : '全选';
+    };
+    items.forEach(item => item.addEventListener('change', sync));
+    selectAll?.addEventListener('click', () => {
+      const allSelected = items.length > 0 && items.every(item => item.checked);
+      items.forEach(item => { item.checked = !allSelected; });
+      sync();
+    });
+    sync();
   });
 
   document.querySelectorAll('[data-conversation-switch]').forEach(select => {

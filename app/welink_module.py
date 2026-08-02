@@ -22,6 +22,7 @@ NOTICE_MESSAGES = {
     "source_created": "消息源已添加。",
     "source_updated": "消息源配置已更新。",
     "source_deleted": "消息源已删除。",
+    "sources_deleted": "已删除选中的消息源。",
     "source_toggled": "消息源启停状态已更新。",
     "sources_enabled": "当前账号的消息源已全部启用。",
     "sources_disabled": "当前账号的消息源已全部暂停。",
@@ -45,6 +46,7 @@ ERROR_MESSAGES = {
     "no_sources": "生产巡检至少需要一个已启用的消息源。",
     "bridge": "生产巡检尚不可用：请先在服务器配置内网桥接地址和令牌。",
     "run_active": "已有生产巡检正在排队或等待桥接，请勿重复提交。",
+    "source_selection": "请至少选择一个消息源。",
 }
 
 
@@ -187,6 +189,33 @@ def register_welink_routes(app, page, require_user, redirect, llm_provider=None)
             db.close()
         return redirect("/welink?notice=source_created#sources")
 
+    @app.post("/welink/sources/bulk/{action}")
+    def bulk_sources(request: Request, action: str, source_ids: str = Form("")):
+        """Apply one explicit bulk operation to the current user's sources.
+
+        This route must be registered before ``/welink/sources/{source_id}/{action}``:
+        otherwise FastAPI attempts to parse the literal ``bulk`` segment as an int
+        and returns a misleading 422 response.
+        """
+        user = require_user(request); db = connection()
+        if action == "enable":
+            db.execute("UPDATE welink_sources SET enabled=1,updated_at=CURRENT_TIMESTAMP WHERE created_by=?", (user["id"],)); notice = "sources_enabled"
+        elif action == "disable":
+            db.execute("UPDATE welink_sources SET enabled=0,updated_at=CURRENT_TIMESTAMP WHERE created_by=?", (user["id"],)); notice = "sources_disabled"
+        elif action == "discussion":
+            db.execute("UPDATE welink_sources SET enabled=CASE WHEN source_type='discussion_group' THEN 1 ELSE 0 END,updated_at=CURRENT_TIMESTAMP WHERE created_by=?", (user["id"],)); notice = "sources_discussion"
+        elif action == "delete":
+            selected = sorted({int(value.strip()) for value in source_ids.split(",") if value.strip().isdigit() and int(value.strip()) > 0})
+            if not selected:
+                db.close()
+                return redirect("/welink?error=source_selection#sources")
+            placeholders = ",".join("?" for _ in selected)
+            db.execute(f"DELETE FROM welink_sources WHERE created_by=? AND id IN ({placeholders})", [user["id"], *selected])
+            notice = "sources_deleted"
+        else:
+            db.close(); raise HTTPException(404)
+        db.commit(); db.close(); return redirect(f"/welink?notice={notice}#sources")
+
     @app.post("/welink/sources/{source_id}/{action}")
     def manage_source(request: Request, source_id: int, action: str):
         user = require_user(request); db = connection(); source = db.execute("SELECT * FROM welink_sources WHERE id=?", (source_id,)).fetchone(); _manage(user, source)
@@ -214,15 +243,6 @@ def register_welink_routes(app, page, require_user, redirect, llm_provider=None)
             return redirect("/welink?error=duplicate#sources")
         db.close()
         return redirect("/welink?notice=source_updated#sources")
-
-    @app.post("/welink/sources/bulk/{action}")
-    def bulk_sources(request: Request, action: str):
-        user = require_user(request); db = connection()
-        if action == "enable": db.execute("UPDATE welink_sources SET enabled=1,updated_at=CURRENT_TIMESTAMP WHERE created_by=?", (user["id"],)); notice = "sources_enabled"
-        elif action == "disable": db.execute("UPDATE welink_sources SET enabled=0,updated_at=CURRENT_TIMESTAMP WHERE created_by=?", (user["id"],)); notice = "sources_disabled"
-        elif action == "discussion": db.execute("UPDATE welink_sources SET enabled=CASE WHEN source_type='discussion_group' THEN 1 ELSE 0 END,updated_at=CURRENT_TIMESTAMP WHERE created_by=?", (user["id"],)); notice = "sources_discussion"
-        else: db.close(); raise HTTPException(404)
-        db.commit(); db.close(); return redirect(f"/welink?notice={notice}#sources")
 
     @app.post("/welink/recipients")
     def create_recipient(request: Request, recipient_type: str = Form(), display_name: str = Form(), receiver_key: str = Form()):

@@ -2,7 +2,7 @@
 {% block title %}重大问题巡检 · 硬件运维工作台{% endblock %}
 {% block content %}
 <style>
-.form input,.form textarea,.form select{width:100%;border:1px solid var(--line);border-radius:11px;padding:10px;background:rgba(255,255,255,.52);color:var(--ink);font:inherit}.form textarea{min-height:72px;resize:vertical}.welink-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:20px 0}.metric{padding:18px}.metric strong{display:block;font-size:30px;margin:5px 0}.metric small{color:var(--muted)}.issue-layout,.workspace-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;margin-top:20px}.issue-row{display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-bottom:1px solid var(--line)}.issue-row:last-child{border:0}.issue-row>div{flex:1}.severity-tag,.priority{font-weight:800;font-size:12px;border-radius:999px;padding:5px 8px;background:#eef2ff;color:#3456b9;height:max-content}.severity-tag.p1{background:#ffe8e8;color:#b42318}.detail-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.detail-grid section{padding:13px;border-radius:12px;background:rgba(255,255,255,.42)}.detail-grid p{margin:7px 0}.action{display:flex;gap:8px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}.action:last-child{border:0}.action div{flex:1}.action small,.evidence small{display:block;color:var(--muted);margin-top:3px}.evidence{padding:9px 0;border-bottom:1px solid var(--line)}.evidence:last-child{border:0}.welink-chat-shell{max-width:none;margin:28px 0 0}.managed-config-list{max-height:min(620px,65vh);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding-right:7px;scrollbar-width:thin;scrollbar-color:rgba(67,105,169,.52) transparent}.managed-config-list::-webkit-scrollbar{width:9px}.managed-config-list::-webkit-scrollbar-track{background:rgba(76,103,148,.08);border-radius:99px}.managed-config-list::-webkit-scrollbar-thumb{background:rgba(67,105,169,.42);border:2px solid transparent;border-radius:99px;background-clip:padding-box}.managed-config-list:focus-visible{outline:2px solid var(--blue);outline-offset:4px;border-radius:10px}.automation-row{display:flex;justify-content:space-between;align-items:center;gap:18px}.automation-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.report-preview{max-height:470px;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.4)}.run-row{display:grid;grid-template-columns:minmax(210px,1fr) 190px auto;gap:18px;align-items:center;padding:14px 0;border-top:1px solid var(--line)}@media(max-width:800px){.welink-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.detail-grid,.issue-layout,.workspace-grid{grid-template-columns:1fr}.managed-config-list{max-height:min(520px,62vh)}.automation-row{align-items:flex-start;flex-direction:column}.run-row{grid-template-columns:1fr}}@media(max-width:520px){.welink-metrics{grid-template-columns:1fr}}
+.form input,.form textarea,.form select{width:100%;border:1px solid var(--line);border-radius:11px;padding:10px;background:rgba(255,255,255,.52);color:var(--ink);font:inherit}.form textarea{min-height:72px;resize:vertical}.welink-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:20px 0}.metric{padding:18px}.metric strong{display:block;font-size:30px;margin:5px 0}.metric small{color:var(--muted)}.issue-layout,.workspace-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;margin-top:20px}.issue-row{display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-bottom:1px solid var(--line)}.issue-row:last-child{border:0}.issue-row>div{flex:1}.severity-tag,.priority{font-weight:800;font-size:12px;border-radius:999px;padding:5px 8px;background:#eef2ff;color:#3456b9;height:max-content}.severity-tag.p1{background:#ffe8e8;color:#b42318}.detail-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.detail-grid section{padding:13px;border-radius:12px;background:rgba(255,255,255,.42)}.detail-grid p{margin:7px 0}.action{display:flex;gap:8px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}.action:last-child{border:0}.action div{flex:1}.action small,.evidence small{display:block;color:var(--muted);margin-top:3px}.evidence{padding:9px 0;border-bottom:1px solid var(--line)}.evidence:last-child{border:0}.welink-chat-shell{max-width:none;margin:28px 0 0}.managed-config-list{max-height:min(450px,48vh);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding-right:7px;scrollbar-width:thin;scrollbar-color:rgba(67,105,169,.52) transparent}.managed-config-list::-webkit-scrollbar{width:9px}.managed-config-list::-webkit-scrollbar-track{background:rgba(76,103,148,.08);border-radius:99px}.managed-config-list::-webkit-scrollbar-thumb{background:rgba(67,105,169,.42);border:2px solid transparent;border-radius:99px;background-clip:padding-box}.managed-config-list:focus-visible{outline:2px solid var(--blue);outline-offset:4px;border-radius:10px}.config-select{display:grid;place-items:center;flex:0 0 auto}.config-select input{width:18px;height:18px;accent-color:var(--blue)}.automation-row{display:flex;justify-content:space-between;align-items:center;gap:18px}.automation-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.report-preview{max-height:470px;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.4)}.run-row{display:grid;grid-template-columns:minmax(210px,1fr) 190px auto;gap:18px;align-items:center;padding:14px 0;border-top:1px solid var(--line)}@media(max-width:800px){.welink-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.detail-grid,.issue-layout,.workspace-grid{grid-template-columns:1fr}.managed-config-list{max-height:min(390px,48vh)}.automation-row{align-items:flex-start;flex-direction:column}.run-row{grid-template-columns:1fr}}@media(max-width:520px){.welink-metrics{grid-template-columns:1fr}}
 </style>
 {% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endmacro %}
 
@@ -108,16 +108,21 @@
     </form>
   </article>
   <article class="panel glass">
-    <div class="panel-title"><div><p class="eyebrow">消息源管理</p><h2>选择性关注</h2></div><span class="relation">{{ sources|length }} 个 · 列表内滚动</span></div>
+    <div class="panel-title"><div><p class="eyebrow">消息源管理</p><h2>选择性关注</h2></div><span class="relation">{{ sources|length }} 个 · 最多显示 3 个，列表内滚动</span></div>
     <div class="hero-actions">
       <form method="post" action="/welink/sources/bulk/enable" data-pending-label="启用中…">{{ csrf() }}<button class="button" type="submit">全部启用</button></form>
       <form method="post" action="/welink/sources/bulk/disable" data-confirm="确认暂停当前账号的全部消息源？稍后可以重新启用。" data-pending-label="暂停中…">{{ csrf() }}<button class="button" type="submit">全部暂停</button></form>
       <form method="post" action="/welink/sources/bulk/discussion" data-confirm="将停用通报群和个人消息，只保留问题讨论群。是否继续？" data-pending-label="切换中…">{{ csrf() }}<button class="button" type="submit">仅看讨论群</button></form>
+      <button class="button" type="button" data-bulk-select-all="source">全选</button>
+      <form method="post" action="/welink/sources/bulk/delete" data-confirm="确认删除选中的消息源？删除后无法恢复，但不会影响已经生成的巡检报告。" data-confirm-title="批量删除消息源" data-confirm-action="删除选中" data-bulk-delete="source" data-pending-label="删除中…">
+        {{ csrf() }}<input type="hidden" name="source_ids" data-bulk-ids="source"><button class="button danger-subtle" type="submit" data-bulk-submit disabled>删除选中</button>
+      </form>
     </div>
     <div class="config-list managed-config-list" role="region" aria-label="已配置消息源列表" tabindex="0">
       {% for source in sources %}
       <div class="config-item">
         <div class="config-item-head">
+          <label class="config-select" aria-label="选择消息源“{{ source.display_name }}”"><input type="checkbox" value="{{ source.id }}" data-bulk-item="source"></label>
           <div class="config-item-main"><strong>{{ source.display_name }}</strong><small>{{ source_types[source.source_type] }} · {{ source.conversation_key }} · {{ source.lookback_days == 0 and '全量' or ('近 ' ~ source.lookback_days ~ ' 天') }}</small><small>{{ source.note or (source.source_type == 'discussion_group' and '分析背景、进展、根因、计划和参与人' or '提取问题、责任人、状态和待办') }}</small></div>
           <span class="status {{ source.enabled and 'completed' or 'failed' }}">{{ source.enabled and '启用' or '停用' }}</span>
           <form method="post" action="/welink/sources/{{ source.id }}/toggle" data-pending-label="…">{{ csrf() }}<button class="text-button" type="submit">{{ source.enabled and '暂停' or '启用' }}</button></form>
@@ -153,7 +158,7 @@
     <p class="hint">{{ bridge_configured and '内网桥接已配置；生产模式下会按启用列表投递。' or '尚未配置内网桥接，任何真实投递都不可用。' }}</p>
   </article>
   <article class="panel glass">
-    <div class="panel-title"><div><p class="eyebrow">接收方管理</p><h2>选择性投递</h2></div><span class="relation">{{ recipients|length }} 个 · 列表内滚动</span></div>
+    <div class="panel-title"><div><p class="eyebrow">接收方管理</p><h2>选择性投递</h2></div><span class="relation">{{ recipients|length }} 个 · 最多显示 3 个，列表内滚动</span></div>
     <div class="config-list managed-config-list" role="region" aria-label="已配置接收方列表" tabindex="0">
       {% for item in recipients %}
       <div class="config-item">
@@ -214,7 +219,7 @@
   </div>
   <div class="chat-composer">
     <textarea id="welink-question" maxlength="3000" aria-label="重大问题追问" placeholder="继续追问；Enter 或 Ctrl/⌘+Enter 发送，Shift+Enter 换行"></textarea>
-    <button class="button primary" id="welink-send" type="button" aria-label="发送" disabled>发送</button>
+    <button class="button primary" id="welink-send" type="button" aria-label="发送" title="发送" disabled><span class="chat-button-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 19V5m0 0 6 6m-6-6-6 6"/></svg></span></button>
   </div>
 </section>
 
