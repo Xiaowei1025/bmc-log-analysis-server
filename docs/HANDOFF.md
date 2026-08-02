@@ -9,6 +9,7 @@
 - 目标服务器：openEuler 24.03 `x86_64`、Python 3.11。
 - 运行架构：FastAPI + SQLite + Nginx/systemd（生产）或 Uvicorn（本地）。
 - 公开仓库保护：GitHub Secret Scanning、Push Protection 和 Dependabot 安全更新已开启；`.github/workflows/ci.yml` 会在 Python 3.11 上执行编译、单元测试和差异检查。仓库尚未选择软件许可证，外部复用前必须由负责人补充 LICENSE。
+- 公开安全告警修复已提交到后续 PR：`Jinja2==3.1.6`、`python-multipart==0.0.31`。合并该 PR 后重新查看 Dependabot 告警，确认 8 个旧告警全部关闭；不要在生产服务器只升级虚拟环境而忘记同步锁定版本文件。
 
 ### 2026-07-30 0.9.0：自然交互与报告处置闭环
 
