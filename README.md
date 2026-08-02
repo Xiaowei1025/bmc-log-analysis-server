@@ -4,6 +4,8 @@
 
 每次提交和 Pull Request 都会由 GitHub Actions 在 Python 3.11 上执行编译与单元测试；Dependabot 会定期检查 Python 和 Actions 依赖，当前已将 `python-multipart` 和 `Jinja2` 固定到公开安全告警标记的修复版本。公开仓库尚未指定软件许可证，若要允许外部复用代码，请由负责人选择并补充合适的 LICENSE。
 
+标准回归命令和 Windows 浏览器验收清单见 [docs/TESTING.md](docs/TESTING.md)。其中导航契约测试会检查所有模板按钮的链接、表单方法、CSRF、危险操作确认和 Python 重定向目标。
+
 面向服务器硬件维护团队的内部 Web 平台：批量 BMC 日志分析、可维护的问题特征库、Markdown 案例库、需求板、日志与特征/案例双向关联、流式 LLM 建议、贡献看板，以及内部工具分发。
 
 ## 本地体验

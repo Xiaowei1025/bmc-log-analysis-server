@@ -70,6 +70,55 @@ class WeLinkModuleTests(unittest.TestCase):
         self.assertIn("notice=sources_deleted", bulk_delete.headers["location"])
         self.assertEqual(1, self.db.execute("SELECT COUNT(*) AS count FROM welink_sources").fetchone()["count"])
 
+    def test_primary_welink_buttons_return_redirects_not_route_errors(self):
+        """Exercise every state-changing WeLink button with a valid demo setup."""
+        endpoint("/welink", "GET")(make_request(self.user_id))  # Seeds demo issues and a conversation.
+        source_response = endpoint("/welink/sources", "POST")(
+            make_request(self.user_id),
+            source_type="notice_group",
+            display_name="按钮回归群",
+            conversation_key="button-regression",
+            note="导航回归",
+            lookback_days=3,
+        )
+        recipient_response = endpoint("/welink/recipients", "POST")(
+            make_request(self.user_id),
+            recipient_type="group",
+            display_name="按钮回归接收群",
+            receiver_key="button-recipient",
+        )
+        self.assertEqual(303, source_response.status_code)
+        self.assertEqual(303, recipient_response.status_code)
+        source_id = self.db.execute("SELECT id FROM welink_sources ORDER BY id DESC LIMIT 1").fetchone()["id"]
+        recipient_id = self.db.execute("SELECT id FROM welink_recipients ORDER BY id DESC LIMIT 1").fetchone()["id"]
+        issue = self.db.execute("SELECT id FROM welink_issues ORDER BY id LIMIT 1").fetchone()
+        action = self.db.execute("SELECT id FROM welink_issue_actions ORDER BY id LIMIT 1").fetchone()
+        conversation = self.db.execute(
+            "SELECT id FROM chat_conversations WHERE user_id=? AND scope='welink' ORDER BY id LIMIT 1", (self.user_id,)
+        ).fetchone()
+
+        calls = [
+            ("/welink/mode", {"run_mode": "demo"}),
+            ("/welink/reports/generate", {}),
+            ("/welink/sources/bulk/{action}", {"action": "enable", "source_ids": ""}),
+            ("/welink/sources/bulk/{action}", {"action": "disable", "source_ids": ""}),
+            ("/welink/sources/bulk/{action}", {"action": "discussion", "source_ids": ""}),
+            ("/welink/sources/{source_id}/{action}", {"source_id": source_id, "action": "toggle"}),
+            ("/welink/sources/{source_id}/edit", {"source_id": source_id, "source_type": "notice_group", "display_name": "按钮回归群2", "conversation_key": "button-regression-2", "note": "", "lookback_days": 3}),
+            ("/welink/recipients/{recipient_id}/{action}", {"recipient_id": recipient_id, "action": "toggle"}),
+            ("/welink/recipients/{recipient_id}/edit", {"recipient_id": recipient_id, "recipient_type": "group", "display_name": "按钮回归接收群2", "receiver_key": "button-recipient-2"}),
+            ("/welink/schedule", {"enabled": "1", "schedule_time": "08:00"}),
+            ("/welink/runs", {}),
+            ("/welink/issues/{issue_id}/status", {"issue_id": issue["id"], "status": "处理中"}),
+            ("/welink/actions/{action_id}/toggle", {"action_id": action["id"]}),
+            ("/welink/chat/conversations", {}),
+            ("/welink/chat/conversations/{conversation_id}/rename", {"conversation_id": conversation["id"], "title": "按钮回归对话"}),
+        ]
+        for route_path, kwargs in calls:
+            response = endpoint(route_path, "POST")(make_request(self.user_id), **kwargs)
+            self.assertEqual(303, response.status_code, route_path)
+            self.assertTrue(response.headers["location"].startswith("/welink"), route_path)
+
     def test_bulk_route_is_registered_before_dynamic_source_route(self):
         routes = [route.path for route in main.app.routes if route.path.startswith("/welink/sources/") and "POST" in route.methods]
         self.assertLess(routes.index("/welink/sources/bulk/{action}"), routes.index("/welink/sources/{source_id}/{action}"))

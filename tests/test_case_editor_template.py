@@ -40,7 +40,7 @@ class CaseEditorTemplateTests(unittest.TestCase):
 
     def test_publish_case_template_renders_with_editor_assets(self):
         rendered = main.templates.get_template("knowledge_case_form.html").render(
-            request=SimpleNamespace(url=SimpleNamespace(path="/cases/new")),
+            request=SimpleNamespace(url=SimpleNamespace(path="/cases/new"), session={}),
             user=SimpleNamespace(username="tester"),
             error=None,
             notice=None,

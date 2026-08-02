@@ -85,7 +85,7 @@ class CaseImporterTests(unittest.TestCase):
 
     def test_case_import_template_renders_supported_formats_and_warning(self):
         rendered = main.templates.get_template("knowledge_case_import.html").render(
-            request=SimpleNamespace(url=SimpleNamespace(path="/cases/import")),
+            request=SimpleNamespace(url=SimpleNamespace(path="/cases/import"), session={}),
             user=SimpleNamespace(username="tester"),
             error=None,
             notice=None,

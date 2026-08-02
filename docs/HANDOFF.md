@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-- 版本：`0.9.1-local`
+- 版本：`0.9.2-local`
 - 更新日期：2026-08-02
 - 当前阶段：本地调试完成，**尚未部署到服务器**。
 - GitHub 代码仓库（公开）：`https://github.com/Xiaowei1025/bmc-log-analysis-server`。公开仓库只推送可复现源码、测试、部署配置、Handoff 和文档生成素材；绝不推送 `.env`、`data/`、`uploads/`、公司日志样例、真实 API Key 或本地交付包。公开后新增漏洞请按 `SECURITY.md` 报告，不要在 Issue 或 PR 中粘贴日志、Token 或客户信息。
@@ -10,6 +10,15 @@
 - 运行架构：FastAPI + SQLite + Nginx/systemd（生产）或 Uvicorn（本地）。
 - 公开仓库保护：GitHub Secret Scanning、Push Protection 和 Dependabot 安全更新已开启；`.github/workflows/ci.yml` 会在 Python 3.11 上执行编译、单元测试和差异检查。仓库尚未选择软件许可证，外部复用前必须由负责人补充 LICENSE。
 - 公开安全告警修复已提交到后续 PR：`Jinja2==3.1.6`、`python-multipart==0.0.31`。合并该 PR 后重新查看 Dependabot 告警，确认 8 个旧告警全部关闭；不要在生产服务器只升级虚拟环境而忘记同步锁定版本文件。
+
+### 2026-08-02 0.9.2：全站导航契约与标准回归测试
+
+- 新增 `tests/test_navigation_contract.py`，扫描所有模板中的本地 `href`、POST 表单 `action` 和流式接口，确认它们匹配已注册路由与 HTTP 方法；同时检查 Python 处理器中的重定向目标仍可进入 GET 页面。
+- 同一套测试会阻止新的状态变更表单遗漏 CSRF，并要求删除/取消导入操作具备站内确认或明确确认逻辑。
+- 新增 WeLink 主要按钮路由级回归用例，覆盖模式切换、报告生成、消息源批量启停/筛选、消息源编辑、接收方编辑、自动化规则、演示巡检、问题/行动项、对话创建和重命名；每项确认返回 303 且回到 `/welink`，避免再次出现 404/422 错误跳转。
+- 本轮审计发现并修复案例导入流程 4 个表单缺少 CSRF 的问题，以及两个“取消导入”按钮缺少确认的问题；这类问题以后会由导航契约测试自动拦截。
+- 新增 `docs/TESTING.md`，规定每次功能完成后的编译、单元测试、差异检查、Windows 浏览器验收、控制台检查和数据安全边界。
+- 验证结果：`.venv312/bin/python -m compileall -q app tests`、`.venv312/bin/python -m unittest discover -v`（共 **51 项通过**）和 `git diff --check` 均通过。
 
 ### 2026-08-02 0.9.1：WeLink 操作闭环修复
 
