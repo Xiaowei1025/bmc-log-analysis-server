@@ -5,9 +5,10 @@
 - 版本：`0.9.0-local`
 - 更新日期：2026-07-30
 - 当前阶段：本地调试完成，**尚未部署到服务器**。
-- GitHub 代码仓库（私有）：`https://github.com/Xiaowei1025/bmc-log-analysis-server`。仅推送可复现源码、测试、部署配置、Handoff 和文档生成素材；绝不推送 `.env`、`data/`、`uploads/`、公司日志样例或本地交付包。
+- GitHub 代码仓库（公开）：`https://github.com/Xiaowei1025/bmc-log-analysis-server`。公开仓库只推送可复现源码、测试、部署配置、Handoff 和文档生成素材；绝不推送 `.env`、`data/`、`uploads/`、公司日志样例、真实 API Key 或本地交付包。公开后新增漏洞请按 `SECURITY.md` 报告，不要在 Issue 或 PR 中粘贴日志、Token 或客户信息。
 - 目标服务器：openEuler 24.03 `x86_64`、Python 3.11。
 - 运行架构：FastAPI + SQLite + Nginx/systemd（生产）或 Uvicorn（本地）。
+- 公开仓库保护：GitHub Secret Scanning、Push Protection 和 Dependabot 安全更新已开启；`.github/workflows/ci.yml` 会在 Python 3.11 上执行编译、单元测试和差异检查。仓库尚未选择软件许可证，外部复用前必须由负责人补充 LICENSE。
 
 ### 2026-07-30 0.9.0：自然交互与报告处置闭环
 

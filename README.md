@@ -1,5 +1,9 @@
 # BMC 智能日志平台
 
+本仓库已公开。源码、测试和部署文档可公开查看，但 `.env`、API Key、WeLink 凭证、数据库、上传日志和公司内部规则均不属于仓库内容。安全问题请先阅读 [SECURITY.md](SECURITY.md)，贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+每次提交和 Pull Request 都会由 GitHub Actions 在 Python 3.11 上执行编译与单元测试；Dependabot 会定期检查 Python 和 Actions 依赖。公开仓库尚未指定软件许可证，若要允许外部复用代码，请由负责人选择并补充合适的 LICENSE。
+
 面向服务器硬件维护团队的内部 Web 平台：批量 BMC 日志分析、可维护的问题特征库、Markdown 案例库、需求板、日志与特征/案例双向关联、流式 LLM 建议、贡献看板，以及内部工具分发。
 
 ## 本地体验
