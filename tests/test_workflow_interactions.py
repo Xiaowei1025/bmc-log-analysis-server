@@ -128,6 +128,7 @@ class WorkflowInteractionTests(unittest.TestCase):
         self.assertIn("/cases/new?report_id={{ report.id }}", report)
         self.assertIn("/ask?report_id={{ report.id }}", report)
         self.assertIn("form[method=\"post\"]:not([data-no-pending])", interactions)
+        self.assertIn("submitterProxy", interactions)
         self.assertIn("bmc-form-draft:", interactions)
         self.assertIn("requestSubmit", interactions)
         self.assertIn("DataTransfer", upload)

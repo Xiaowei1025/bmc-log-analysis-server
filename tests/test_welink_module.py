@@ -47,6 +47,82 @@ class WeLinkModuleTests(unittest.TestCase):
         page = endpoint("/welink", "GET")(make_request(self.user_id))
         self.assertIn("服务器问题通报群", page.body.decode("utf-8"))
 
+    def test_mode_switch_and_bulk_source_actions_have_working_routes(self):
+        mode_response = endpoint("/welink/mode", "POST")(make_request(self.user_id), run_mode="demo")
+        self.assertEqual(303, mode_response.status_code)
+        self.assertIn("notice=mode_demo", mode_response.headers["location"])
+        self.assertEqual("demo", self.db.execute("SELECT value FROM app_settings WHERE key='welink_run_mode'").fetchone()["value"])
+
+        for name, key in (("群一", "group-1"), ("群二", "group-2"), ("群三", "group-3")):
+            self.db.execute(
+                "INSERT INTO welink_sources (source_type,display_name,conversation_key,created_by) VALUES ('notice_group',?,?,?)",
+                (name, key, self.user_id),
+            )
+        self.db.commit()
+        ids = [row["id"] for row in self.db.execute("SELECT id FROM welink_sources ORDER BY id").fetchall()]
+        bulk_enable = endpoint("/welink/sources/bulk/{action}", "POST")(make_request(self.user_id), action="enable", source_ids="")
+        self.assertEqual(303, bulk_enable.status_code)
+        self.assertIn("notice=sources_enabled", bulk_enable.headers["location"])
+        bulk_delete = endpoint("/welink/sources/bulk/{action}", "POST")(
+            make_request(self.user_id), action="delete", source_ids=",".join(map(str, ids[:2]))
+        )
+        self.assertEqual(303, bulk_delete.status_code)
+        self.assertIn("notice=sources_deleted", bulk_delete.headers["location"])
+        self.assertEqual(1, self.db.execute("SELECT COUNT(*) AS count FROM welink_sources").fetchone()["count"])
+
+    def test_primary_welink_buttons_return_redirects_not_route_errors(self):
+        """Exercise every state-changing WeLink button with a valid demo setup."""
+        endpoint("/welink", "GET")(make_request(self.user_id))  # Seeds demo issues and a conversation.
+        source_response = endpoint("/welink/sources", "POST")(
+            make_request(self.user_id),
+            source_type="notice_group",
+            display_name="按钮回归群",
+            conversation_key="button-regression",
+            note="导航回归",
+            lookback_days=3,
+        )
+        recipient_response = endpoint("/welink/recipients", "POST")(
+            make_request(self.user_id),
+            recipient_type="group",
+            display_name="按钮回归接收群",
+            receiver_key="button-recipient",
+        )
+        self.assertEqual(303, source_response.status_code)
+        self.assertEqual(303, recipient_response.status_code)
+        source_id = self.db.execute("SELECT id FROM welink_sources ORDER BY id DESC LIMIT 1").fetchone()["id"]
+        recipient_id = self.db.execute("SELECT id FROM welink_recipients ORDER BY id DESC LIMIT 1").fetchone()["id"]
+        issue = self.db.execute("SELECT id FROM welink_issues ORDER BY id LIMIT 1").fetchone()
+        action = self.db.execute("SELECT id FROM welink_issue_actions ORDER BY id LIMIT 1").fetchone()
+        conversation = self.db.execute(
+            "SELECT id FROM chat_conversations WHERE user_id=? AND scope='welink' ORDER BY id LIMIT 1", (self.user_id,)
+        ).fetchone()
+
+        calls = [
+            ("/welink/mode", {"run_mode": "demo"}),
+            ("/welink/reports/generate", {}),
+            ("/welink/sources/bulk/{action}", {"action": "enable", "source_ids": ""}),
+            ("/welink/sources/bulk/{action}", {"action": "disable", "source_ids": ""}),
+            ("/welink/sources/bulk/{action}", {"action": "discussion", "source_ids": ""}),
+            ("/welink/sources/{source_id}/{action}", {"source_id": source_id, "action": "toggle"}),
+            ("/welink/sources/{source_id}/edit", {"source_id": source_id, "source_type": "notice_group", "display_name": "按钮回归群2", "conversation_key": "button-regression-2", "note": "", "lookback_days": 3}),
+            ("/welink/recipients/{recipient_id}/{action}", {"recipient_id": recipient_id, "action": "toggle"}),
+            ("/welink/recipients/{recipient_id}/edit", {"recipient_id": recipient_id, "recipient_type": "group", "display_name": "按钮回归接收群2", "receiver_key": "button-recipient-2"}),
+            ("/welink/schedule", {"enabled": "1", "schedule_time": "08:00"}),
+            ("/welink/runs", {}),
+            ("/welink/issues/{issue_id}/status", {"issue_id": issue["id"], "status": "处理中"}),
+            ("/welink/actions/{action_id}/toggle", {"action_id": action["id"]}),
+            ("/welink/chat/conversations", {}),
+            ("/welink/chat/conversations/{conversation_id}/rename", {"conversation_id": conversation["id"], "title": "按钮回归对话"}),
+        ]
+        for route_path, kwargs in calls:
+            response = endpoint(route_path, "POST")(make_request(self.user_id), **kwargs)
+            self.assertEqual(303, response.status_code, route_path)
+            self.assertTrue(response.headers["location"].startswith("/welink"), route_path)
+
+    def test_bulk_route_is_registered_before_dynamic_source_route(self):
+        routes = [route.path for route in main.app.routes if route.path.startswith("/welink/sources/") and "POST" in route.methods]
+        self.assertLess(routes.index("/welink/sources/bulk/{action}"), routes.index("/welink/sources/{source_id}/{action}"))
+
     def test_demo_run_never_reads_or_sends_messages(self):
         with patch.dict("os.environ", {"WELINK_AGENT_BRIDGE_URL": "", "WELINK_AGENT_BRIDGE_TOKEN": ""}):
             response = endpoint("/welink/runs", "POST")(make_request(self.user_id))
@@ -236,6 +312,8 @@ class WeLinkModuleTests(unittest.TestCase):
         self.assertIn("method: 'POST'", runtime)
         self.assertIn("csrf_token", runtime)
         self.assertIn("sessionStorage", runtime)
+        self.assertIn("STOP_ICON", runtime)
+        self.assertIn("chat-button-glyph", runtime)
 
     def test_all_non_chat_llm_surfaces_share_stop_runtime(self):
         root = Path(__file__).resolve().parents[1]
@@ -253,7 +331,11 @@ class WeLinkModuleTests(unittest.TestCase):
         self.assertEqual(2, page.count("config-list managed-config-list"))
         self.assertIn('aria-label="已配置消息源列表"', page)
         self.assertIn('aria-label="已配置接收方列表"', page)
-        self.assertIn("max-height:min(620px,65vh)", page)
+        self.assertIn("最多显示 3 个，列表内滚动", page)
+        self.assertIn("max-height:min(450px,48vh)", page)
+        template = (Path(__file__).resolve().parents[1] / "app/templates/welink.html").read_text(encoding="utf-8")
+        self.assertIn('data-bulk-delete="source"', template)
+        self.assertIn('data-bulk-item="source"', template)
 
 
 if __name__ == "__main__":

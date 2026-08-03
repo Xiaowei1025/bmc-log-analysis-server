@@ -1,5 +1,7 @@
 window.BmcChat = (() => {
   const nearBottom = element => element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+  const SEND_ICON = '<span class="chat-button-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 19V5m0 0 6 6m-6-6-6 6"/></svg></span>';
+  const STOP_ICON = '<span class="chat-button-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="9.25"/><rect x="8.25" y="8.25" width="7.5" height="7.5" rx="1"/></svg></span>';
 
   function mount(options) {
     const input = document.getElementById(options.inputId);
@@ -34,8 +36,11 @@ window.BmcChat = (() => {
     const setState = state => {
       const running = state === 'running';
       const stopping = state === 'stopping';
-      send.textContent = running ? '停止' : stopping ? '正在停止…' : '发送';
+      const label = running ? '停止' : stopping ? '正在停止…' : '发送';
+      send.innerHTML = running || stopping ? STOP_ICON : SEND_ICON;
       send.setAttribute('aria-label', running ? '停止生成' : stopping ? '正在停止生成' : '发送');
+      send.setAttribute('title', label);
+      send.dataset.state = state;
       send.classList.toggle('primary', state === 'idle');
       send.classList.toggle('stop-button', running || stopping);
       send.disabled = stopping || (state === 'idle' && !input.value.trim());

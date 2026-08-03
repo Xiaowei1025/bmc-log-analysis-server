@@ -80,6 +80,7 @@
         </div>
         {% if user and user.id == tool.created_by %}
         <form class="form compact tool-form" method="post" action="/tools/{{ tool.id }}/versions" enctype="multipart/form-data" data-pending-label="正在上传…">
+          {{ csrf_input(request) }}
           <label>版本号<input name="version" required placeholder="例如：1.1.0"></label>
           <label>更新说明<textarea name="release_notes" placeholder="说明新增能力、修复内容和兼容性变化"></textarea></label>
           <label>工具文件<input type="file" name="package" required></label>
@@ -97,6 +98,7 @@
         </div>
         {% if user %}
         <form class="form compact tool-form" method="post" action="/tools/{{ tool.id }}/feedback" data-pending-label="正在提交…">
+          {{ csrf_input(request) }}
           <label class="sr-only" for="tool-feedback-body">反馈内容</label>
           <textarea id="tool-feedback-body" name="body" required placeholder="反馈问题、功能建议或使用体验"></textarea>
           <button class="button tool-feedback-button" type="submit">提交建议</button>
