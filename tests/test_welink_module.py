@@ -59,6 +59,14 @@ class WeLinkModuleTests(unittest.TestCase):
         page = endpoint("/welink", "GET")(make_request(self.user_id)).body.decode("utf-8")
         self.assertNotIn('id="groups"', page)
         self.assertIn('data-dialog-open="group-settings-dialog"', page)
+        self.assertIn(">巡检管理</button>", page)
+        self.assertIn('id="inspection-group-label"', page)
+        self.assertIn('id="inspection-mode-label"', page)
+        hero = page.split('<section class="page-hero">', 1)[1].split("</section>", 1)[0]
+        self.assertNotIn("当前分组", hero)
+        self.assertNotIn("分组设置", hero)
+        self.assertNotIn(">演示</button>", hero)
+        self.assertNotIn(">生产</button>", hero)
         source = self.db.execute("SELECT * FROM welink_sources WHERE conversation_key=?", ("workspace-group",)).fetchone()
         response = endpoint("/welink/sources/{source_id}/edit", "POST")(
             make_request(self.user_id),
