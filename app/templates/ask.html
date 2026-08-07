@@ -33,7 +33,7 @@
     <button class="scroll-latest" id="ask-latest" type="button" hidden>回到最新 ↓</button>
   </div>
   <div class="chat-composer">
-    <textarea id="question" maxlength="3000" aria-label="维护问题" data-context-prompt="{{ initial_question|default('') and 'true' or 'false' }}" placeholder="输入维护问题；Enter 或 Ctrl/⌘+Enter 发送，Shift+Enter 换行">{{ initial_question|default('') }}</textarea>
+    <textarea id="question" maxlength="3000" aria-label="维护问题" data-context-prompt="{{ initial_question|default('') and 'true' or 'false' }}" placeholder="输入维护问题；Enter 换行，Ctrl/⌘+Enter 发送">{{ initial_question|default('') }}</textarea>
     <button class="button primary" id="ask-button" type="button" aria-label="发送" title="发送" disabled><span class="chat-button-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 19V5m0 0 6 6m-6-6-6 6"/></svg></span></button>
   </div>
 </section>

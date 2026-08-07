@@ -4,6 +4,7 @@
 <style>
 .form input,.form textarea,.form select{width:100%;border:1px solid var(--line);border-radius:11px;padding:10px;background:rgba(255,255,255,.52);color:var(--ink);font:inherit}.form textarea{min-height:72px;resize:vertical}.welink-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:20px 0}.metric{padding:18px}.metric strong{display:block;font-size:30px;margin:5px 0}.metric small{color:var(--muted)}.issue-layout,.workspace-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;margin-top:20px}.issue-row{display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-bottom:1px solid var(--line)}.issue-row:last-child{border:0}.issue-row>div{flex:1}.severity-tag,.priority{font-weight:800;font-size:12px;border-radius:999px;padding:5px 8px;background:#eef2ff;color:#3456b9;height:max-content}.severity-tag.p1{background:#ffe8e8;color:#b42318}.detail-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.detail-grid section{padding:13px;border-radius:12px;background:rgba(255,255,255,.42)}.detail-grid p{margin:7px 0}.action{display:flex;gap:8px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}.action:last-child{border:0}.action div{flex:1}.action small,.evidence small{display:block;color:var(--muted);margin-top:3px}.evidence{padding:9px 0;border-bottom:1px solid var(--line)}.evidence:last-child{border:0}.welink-chat-shell{max-width:none;margin:28px 0 0}.managed-config-list{max-height:min(450px,48vh);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding-right:7px;scrollbar-width:thin;scrollbar-color:rgba(67,105,169,.52) transparent}.managed-config-list::-webkit-scrollbar{width:9px}.managed-config-list::-webkit-scrollbar-track{background:rgba(76,103,148,.08);border-radius:99px}.managed-config-list::-webkit-scrollbar-thumb{background:rgba(67,105,169,.42);border:2px solid transparent;border-radius:99px;background-clip:padding-box}.managed-config-list:focus-visible{outline:2px solid var(--blue);outline-offset:4px;border-radius:10px}.config-select{display:grid;place-items:center;flex:0 0 auto}.config-select input{width:18px;height:18px;accent-color:var(--blue)}.automation-row{display:flex;justify-content:space-between;align-items:center;gap:18px}.automation-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.report-preview{max-height:470px;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.4)}.run-row{display:grid;grid-template-columns:minmax(210px,1fr) 190px auto;gap:18px;align-items:center;padding:14px 0;border-top:1px solid var(--line)}@media(max-width:800px){.welink-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.detail-grid,.issue-layout,.workspace-grid{grid-template-columns:1fr}.managed-config-list{max-height:min(390px,48vh)}.automation-row{align-items:flex-start;flex-direction:column}.run-row{grid-template-columns:1fr}}@media(max-width:520px){.welink-metrics{grid-template-columns:1fr}}
 </style>
+<style>.group-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.group-bar form{display:flex;align-items:center;gap:8px}.group-bar select{min-width:220px}.group-context-form{display:flex;align-items:center;gap:7px}.group-context-form label{display:flex;align-items:center;gap:7px;font-size:12px;color:rgba(255,255,255,.86)}.group-context-form select{min-width:170px;border:1px solid rgba(255,255,255,.48);border-radius:11px;padding:8px 10px;background:rgba(255,255,255,.18);color:#fff;font:inherit}.group-context-form option{color:#17233a}.group-settings-dialog{width:min(760px,calc(100% - 28px));max-width:760px;max-height:min(84vh,760px);overflow:auto}.group-settings-dialog::backdrop{background:rgba(8,17,34,.44);backdrop-filter:blur(5px)}.group-settings-dialog .group-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.group-settings-dialog .group-card{padding:14px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.28)}.group-settings-dialog .group-card small{display:block;color:var(--muted);margin:5px 0}.group-settings-current{padding:13px 15px;border-radius:14px;background:rgba(38,116,223,.1);margin:14px 0}.connector-note{font-size:13px;color:var(--muted)}</style>
 {% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endmacro %}
 
 <section class="page-hero">
@@ -13,14 +14,18 @@
     <p>从群消息配置、AI 汇总到责任行动和持续追问；真实读取与发送只能通过受控内网桥接。</p>
   </div>
   <div class="hero-actions">
-    <form method="post" action="/welink/runs" data-pending-label="正在启动…">
-      {{ csrf() }}
+    <form method="post" action="/welink/runs?group_id={{ selected_group_id }}" data-pending-label="正在启动…">
+      {{ csrf() }}<input type="hidden" name="group_id" value="{{ selected_group_id }}">
       <button class="button primary" type="submit" {% if active_run %}disabled title="已有巡检任务正在执行"{% elif run_mode == 'production' and not production_ready %}disabled title="请先配置内网桥接并启用至少一个消息源"{% endif %}>{{ active_run and '巡检进行中' or '开始巡检' }}</button>
     </form>
-    <form method="post" action="/welink/reports/generate" data-pending-label="正在生成…">
+    <form method="post" action="/welink/reports/generate?group_id={{ selected_group_id }}" data-pending-label="正在生成…">
       {{ csrf() }}
       <button class="button" type="submit">生成当前模式报告</button>
     </form>
+    <form method="get" action="/welink" class="group-context-form" aria-label="切换当前巡检分组">
+      <label>当前分组<select name="group_id" onchange="this.form.submit()">{% for group in groups %}<option value="{{ group.id }}" {{ group.id == selected_group_id and 'selected' or '' }}>{{ group.name }} · {{ group.member_count }} 人</option>{% endfor %}</select></label>
+    </form>
+    <button class="button" type="button" data-dialog-open="group-settings-dialog">分组设置</button>
     {% if can_switch_mode %}
     <form method="post" action="/welink/mode" class="mode-segmented" aria-label="巡检运行模式" {% if run_mode == 'demo' %}data-confirm="即将进入生产模式。只有内网桥接和消息源就绪后才能读取真实消息，是否继续？" data-confirm-value="production"{% endif %}>
       {{ csrf() }}
@@ -35,6 +40,16 @@
 
 {% if error_message %}<div class="notice error" role="alert" data-transient>{{ error_message }}</div>{% endif %}
 {% if notice_message %}<div class="notice success" role="status" data-transient>{{ notice_message }}</div>{% endif %}
+<dialog id="group-settings-dialog" class="help-dialog group-settings-dialog glass" aria-labelledby="group-settings-title"{% if settings_open %} data-default-open="true"{% endif %}>
+  <div class="dialog-head"><div><p class="eyebrow">巡检工作空间</p><h2 id="group-settings-title">分组设置</h2></div><button class="icon-button" type="button" data-dialog-close aria-label="关闭分组设置">×</button></div>
+  <p class="hint">消息源、接收方、台账、报告和问答只在当前分组内共享；个人空间默认仅自己可见。</p>
+  <div class="group-settings-current"><strong>当前分组：{{ groups|selectattr('id','equalto',selected_group_id)|map(attribute='name')|first or '个人空间' }}</strong><br><small class="hint">如需切换业务上下文，请使用页面顶部的当前分组选择。</small></div>
+  <div class="group-grid">
+    <form method="post" action="/welink/groups" class="form compact group-card">{{ csrf() }}<h3>新建共享分组</h3><label>名称<input name="name" required maxlength="80" placeholder="例如：鲲鹏重大问题组"></label><label>说明<textarea name="description" maxlength="300" placeholder="组内共享范围和职责"></textarea></label><button class="button primary" type="submit">创建分组</button></form>
+    {% for group in groups if not group.is_personal %}<div class="group-card"><strong>{{ group.name }}</strong><small>{{ group.description or '暂无说明' }} · {{ group.member_count }} 人</small>{% if group.current_role == 'owner' or user_role == 'admin' %}<details><summary>管理分组</summary><form method="post" action="/welink/groups/{{ group.id }}/edit" class="form compact">{{ csrf() }}<label>名称<input name="name" value="{{ group.name }}" required></label><label>说明<textarea name="description">{{ group.description }}</textarea></label><button class="button" type="submit">保存分组</button></form><form method="post" action="/welink/groups/{{ group.id }}/members" class="form compact">{{ csrf() }}<label>添加成员工号/账号<input name="username" placeholder="IDaaS 同步后的用户名" required></label><button class="button" type="submit">添加成员</button></form><form method="post" action="/welink/groups/{{ group.id }}/delete" data-confirm="确认删除该分组？组内配置将不再可见。">{{ csrf() }}<button class="text-button danger-subtle" type="submit">删除分组</button></form></details>{% else %}<small>当前账号为只读成员，不能修改分组设置。</small>{% endif %}</div>{% endfor %}
+  </div>
+  <div class="conversation-rename-actions"><button class="button" type="button" data-dialog-close>完成</button></div>
+</dialog>
 {% if run_mode == 'production' and not production_ready %}
 <section class="readiness-banner" role="status">
   <p><strong>生产巡检尚未就绪</strong>{% if not bridge_configured %}服务器未配置 WeLink 内网桥接地址或令牌。{% else %}请至少启用一个属于当前账号的消息源。{% endif %}</p>
@@ -97,8 +112,10 @@
 <section class="workspace-grid" id="sources">
   <article class="panel glass">
     <p class="eyebrow">信息来源</p><h2>添加消息源</h2>
+    {% if not can_manage_group_configs %}<p class="hint">当前分组为只读成员，请联系分组负责人调整消息源。</p>{% else %}
     <form method="post" action="/welink/sources" class="form compact" data-pending-label="保存中…">
       {{ csrf() }}
+      <input type="hidden" name="group_id" value="{{ selected_group_id }}">
       <label>类型<select name="source_type"><option value="notice_group">问题通报群</option><option value="discussion_group">问题讨论群</option><option value="person">个人消息</option></select></label>
       <label>群名或人员备注<input name="display_name" required placeholder="例如：服务器问题通报群"></label>
       <label>群标识或工号<input name="conversation_key" required placeholder="群 ID / 工号"></label>
@@ -106,17 +123,21 @@
       <label>回看天数；讨论群填 0 为全量<input name="lookback_days" type="number" min="0" max="365" value="3"></label>
       <button class="button primary" type="submit">保存消息源</button>
     </form>
+    {% endif %}
   </article>
   <article class="panel glass">
     <div class="panel-title"><div><p class="eyebrow">消息源管理</p><h2>选择性关注</h2></div><span class="relation">{{ sources|length }} 个 · 最多显示 3 个，列表内滚动</span></div>
     <div class="hero-actions">
-      <form method="post" action="/welink/sources/bulk/enable" data-pending-label="启用中…">{{ csrf() }}<button class="button" type="submit">全部启用</button></form>
-      <form method="post" action="/welink/sources/bulk/disable" data-confirm="确认暂停当前账号的全部消息源？稍后可以重新启用。" data-pending-label="暂停中…">{{ csrf() }}<button class="button" type="submit">全部暂停</button></form>
-      <form method="post" action="/welink/sources/bulk/discussion" data-confirm="将停用通报群和个人消息，只保留问题讨论群。是否继续？" data-pending-label="切换中…">{{ csrf() }}<button class="button" type="submit">仅看讨论群</button></form>
+      {% if not can_manage_group_configs %}<span class="hint">当前分组为只读成员，仅可查看配置。</span>{% endif %}
+      {% if can_manage_group_configs %}
+      <form method="post" action="/welink/sources/bulk/enable?group_id={{ selected_group_id }}" data-pending-label="启用中…">{{ csrf() }}<button class="button" type="submit">全部启用</button></form>
+      <form method="post" action="/welink/sources/bulk/disable?group_id={{ selected_group_id }}" data-confirm="确认暂停当前分组的全部消息源？稍后可以重新启用。" data-pending-label="暂停中…">{{ csrf() }}<button class="button" type="submit">全部暂停</button></form>
+      <form method="post" action="/welink/sources/bulk/discussion?group_id={{ selected_group_id }}" data-confirm="将停用通报群和个人消息，只保留问题讨论群。是否继续？" data-pending-label="切换中…">{{ csrf() }}<button class="button" type="submit">仅看讨论群</button></form>
       <button class="button" type="button" data-bulk-select-all="source">全选</button>
-      <form method="post" action="/welink/sources/bulk/delete" data-confirm="确认删除选中的消息源？删除后无法恢复，但不会影响已经生成的巡检报告。" data-confirm-title="批量删除消息源" data-confirm-action="删除选中" data-bulk-delete="source" data-pending-label="删除中…">
+      <form method="post" action="/welink/sources/bulk/delete?group_id={{ selected_group_id }}" data-confirm="确认删除选中的消息源？删除后无法恢复，但不会影响已经生成的巡检报告。" data-confirm-title="批量删除消息源" data-confirm-action="删除选中" data-bulk-delete="source" data-pending-label="删除中…">
         {{ csrf() }}<input type="hidden" name="source_ids" data-bulk-ids="source"><button class="button danger-subtle" type="submit" data-bulk-submit disabled>删除选中</button>
       </form>
+      {% endif %}
     </div>
     <div class="config-list managed-config-list" role="region" aria-label="已配置消息源列表" tabindex="0">
       {% for source in sources %}
@@ -125,9 +146,9 @@
           <label class="config-select" aria-label="选择消息源“{{ source.display_name }}”"><input type="checkbox" value="{{ source.id }}" data-bulk-item="source"></label>
           <div class="config-item-main"><strong>{{ source.display_name }}</strong><small>{{ source_types[source.source_type] }} · {{ source.conversation_key }} · {{ source.lookback_days == 0 and '全量' or ('近 ' ~ source.lookback_days ~ ' 天') }}</small><small>{{ source.note or (source.source_type == 'discussion_group' and '分析背景、进展、根因、计划和参与人' or '提取问题、责任人、状态和待办') }}</small></div>
           <span class="status {{ source.enabled and 'completed' or 'failed' }}">{{ source.enabled and '启用' or '停用' }}</span>
-          <form method="post" action="/welink/sources/{{ source.id }}/toggle" data-pending-label="…">{{ csrf() }}<button class="text-button" type="submit">{{ source.enabled and '暂停' or '启用' }}</button></form>
+          {% if source.id in managed_source_ids %}<form method="post" action="/welink/sources/{{ source.id }}/toggle" data-pending-label="…">{{ csrf() }}<button class="text-button" type="submit">{{ source.enabled and '暂停' or '启用' }}</button></form>{% else %}<small class="hint">只读</small>{% endif %}
         </div>
-        <details class="config-editor"><summary>编辑配置</summary>
+        {% if source.id in managed_source_ids %}<details class="config-editor"><summary>编辑配置</summary>
           <form method="post" action="/welink/sources/{{ source.id }}/edit" class="form compact" data-pending-label="保存中…">
             {{ csrf() }}
             <label>类型<select name="source_type">{% for value,label in source_types.items() %}<option value="{{ value }}" {{ source.source_type == value and 'selected' or '' }}>{{ label }}</option>{% endfor %}</select></label>
@@ -138,7 +159,7 @@
             <button class="button" type="submit">保存修改</button>
           </form>
           <form method="post" action="/welink/sources/{{ source.id }}/delete" data-confirm="确认删除消息源“{{ source.display_name }}”？该操作不能撤销。" data-pending-label="删除中…">{{ csrf() }}<button class="text-button danger-subtle" type="submit">删除消息源</button></form>
-        </details>
+        </details>{% endif %}
       </div>
       {% else %}<p class="empty">尚未配置消息源。</p>{% endfor %}
     </div>
@@ -148,13 +169,16 @@
 <section class="workspace-grid result-section" id="recipients">
   <article class="panel glass">
     <p class="eyebrow">报告发送</p><h2>添加接收方</h2>
+    {% if not can_manage_group_configs %}<p class="hint">当前分组为只读成员，请联系分组负责人调整接收方。</p>{% else %}
     <form method="post" action="/welink/recipients" class="form compact" data-pending-label="保存中…">
       {{ csrf() }}
+      <input type="hidden" name="group_id" value="{{ selected_group_id }}">
       <label>类型<select name="recipient_type"><option value="group">群组</option><option value="person">个人</option></select></label>
       <label>名称或备注<input name="display_name" required placeholder="例如：硬件值班群"></label>
       <label>群标识或工号<input name="receiver_key" required placeholder="接收群 ID / 工号"></label>
       <button class="button primary" type="submit">保存接收方</button>
     </form>
+    {% endif %}
     <p class="hint">{{ bridge_configured and '内网桥接已配置；生产模式下会按启用列表投递。' or '尚未配置内网桥接，任何真实投递都不可用。' }}</p>
   </article>
   <article class="panel glass">
@@ -165,9 +189,9 @@
         <div class="config-item-head">
           <div class="config-item-main"><strong>{{ item.display_name }}</strong><small>{{ recipient_types[item.recipient_type] }} · {{ item.receiver_key }}</small></div>
           <span class="status {{ item.enabled and 'completed' or 'failed' }}">{{ item.enabled and '启用' or '停用' }}</span>
-          <form method="post" action="/welink/recipients/{{ item.id }}/toggle" data-pending-label="…">{{ csrf() }}<button class="text-button" type="submit">{{ item.enabled and '暂停' or '启用' }}</button></form>
+          {% if item.id in managed_recipient_ids %}<form method="post" action="/welink/recipients/{{ item.id }}/toggle" data-pending-label="…">{{ csrf() }}<button class="text-button" type="submit">{{ item.enabled and '暂停' or '启用' }}</button></form>{% else %}<small class="hint">只读</small>{% endif %}
         </div>
-        <details class="config-editor"><summary>编辑配置</summary>
+        {% if item.id in managed_recipient_ids %}<details class="config-editor"><summary>编辑配置</summary>
           <form method="post" action="/welink/recipients/{{ item.id }}/edit" class="form compact" data-pending-label="保存中…">
             {{ csrf() }}
             <label>类型<select name="recipient_type">{% for value,label in recipient_types.items() %}<option value="{{ value }}" {{ item.recipient_type == value and 'selected' or '' }}>{{ label }}</option>{% endfor %}</select></label>
@@ -176,7 +200,7 @@
             <button class="button" type="submit">保存修改</button>
           </form>
           <form method="post" action="/welink/recipients/{{ item.id }}/delete" data-confirm="确认删除接收方“{{ item.display_name }}”？该操作不能撤销。" data-pending-label="删除中…">{{ csrf() }}<button class="text-button danger-subtle" type="submit">删除接收方</button></form>
-        </details>
+        </details>{% endif %}
       </div>
       {% else %}<p class="empty">尚未配置接收方。</p>{% endfor %}
     </div>
@@ -187,7 +211,7 @@
   <article class="panel glass">
     <div class="panel-title">
       <div><p class="eyebrow">最新分析结果 · {{ run_mode == 'demo' and '演示模式' or '生产模式' }}</p><h2>巡检报告</h2></div>
-      <form method="post" action="/welink/reports/generate" data-pending-label="正在生成…">{{ csrf() }}<button class="button" type="submit">重新生成</button></form>
+      <form method="post" action="/welink/reports/generate?group_id={{ selected_group_id }}" data-pending-label="正在生成…">{{ csrf() }}<button class="button" type="submit">重新生成</button></form>
     </div>
     {% if latest_report %}<div class="report-preview markdown-output" data-markdown>{{ latest_report.content }}</div>{% else %}<p class="empty">当前模式尚无报告。点击“生成当前模式报告”，系统只会使用当前模式的问题台账。</p>{% endif %}
   </article>
@@ -203,9 +227,9 @@
 <section class="chat-shell welink-chat-shell glass" id="chat">
   <div class="chat-head">
     <div><p class="eyebrow">智能问答 · {{ run_mode == 'demo' and '演示上下文' or '生产上下文' }}</p><h1>重大问题持续追问</h1><p>AI 只参考当前运行模式的问题台账。支持流式 Markdown、表格和可折叠思考过程。</p></div>
-    {% set conversation_switch_template = '/welink?chat={id}#chat' %}
-    {% set conversation_new_action = '/welink/chat/conversations' %}
-    {% set conversation_rename_action = '/welink/chat/conversations/' ~ active_conversation.id ~ '/rename' %}
+    {% set conversation_switch_template = '/welink?group_id=' ~ selected_group_id ~ '&chat={id}#chat' %}
+    {% set conversation_new_action = '/welink/chat/conversations?group_id=' ~ selected_group_id %}
+    {% set conversation_rename_action = '/welink/chat/conversations/' ~ active_conversation.id ~ '/rename?group_id=' ~ selected_group_id %}
     {% set conversation_csrf_markup = csrf() %}
     {% include '_conversation_controls.html' %}
   </div>
@@ -218,17 +242,19 @@
     <button class="scroll-latest" id="welink-latest" type="button" hidden>回到最新 ↓</button>
   </div>
   <div class="chat-composer">
-    <textarea id="welink-question" maxlength="3000" aria-label="重大问题追问" placeholder="继续追问；Enter 或 Ctrl/⌘+Enter 发送，Shift+Enter 换行"></textarea>
+    <textarea id="welink-question" maxlength="3000" aria-label="重大问题追问" placeholder="继续追问；Enter 换行，Ctrl/⌘+Enter 发送"></textarea>
     <button class="button primary" id="welink-send" type="button" aria-label="发送" title="发送" disabled><span class="chat-button-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 19V5m0 0 6 6m-6-6-6 6"/></svg></span></button>
   </div>
 </section>
 
 <section class="panel glass result-section" id="automation">
-  <form method="post" action="/welink/schedule" class="automation-row" data-pending-label="保存中…">
+  <form method="post" action="/welink/schedule?group_id={{ selected_group_id }}" class="automation-row" data-pending-label="保存中…">
     {{ csrf() }}
     <div><p class="eyebrow">自动化流程</p><h2>配置内网定时执行规则</h2><p>保存规则不等于已执行；只有内网调度器接入后才会按时读取消息、生成报告并投递。</p></div>
-    <div class="automation-controls"><span class="status {{ bridge_configured and 'completed' or 'failed' }}">{{ bridge_configured and '执行器已连接' or '执行器未连接' }}</span><label><input type="checkbox" name="enabled" value="1" {{ schedule_enabled and 'checked' or '' }}> 启用规则</label><input type="time" name="schedule_time" value="{{ schedule_time }}"><button class="button primary" type="submit">保存规则</button></div>
+    <div class="automation-controls"><span class="status {{ (bridge_configured or connector_enabled) and 'completed' or 'failed' }}">{{ bridge_configured and '桥接已连接' or (connector_enabled and '本地连接器模式' or '执行器未连接') }}</span><label><input type="checkbox" name="enabled" value="1" {{ schedule_enabled and 'checked' or '' }}> 启用规则</label><input type="time" name="schedule_time" value="{{ schedule_time }}"><button class="button primary" type="submit">保存规则</button></div>
   </form>
+  <div class="connector-note">本地连接器模式下，服务器只创建任务，不接触个人 WeLink 登录态。Windows 电脑先点击下方配对生成一次性令牌，再由连接器安全保存令牌并主动轮询任务。</div>
+  {% if connector_enabled %}<div class="group-grid"><form method="post" action="/welink/connectors/pair" class="form compact group-card">{{ csrf() }}<label>Windows 设备名<input name="device_name" value="Windows-{{ user_role == 'admin' and '管理员' or '工作站' }}" required></label><button class="button" type="submit">生成连接器令牌</button></form>{% for device in devices %}<div class="group-card"><strong>{{ device.device_name }}</strong><small>{{ device.status == 'active' and '启用' or '已撤销' }} · 最近心跳：{{ device.last_seen_at or '尚未连接' }}</small>{% if device.status == 'active' %}<form method="post" action="/welink/connectors/{{ device.id }}/revoke" data-confirm="确认撤销此连接器？该 Windows 电脑将无法再领取任务。">{{ csrf() }}<button class="text-button danger-subtle" type="submit">撤销</button></form>{% endif %}</div>{% endfor %}</div>{% endif %}
 </section>
 
 <section class="panel glass result-section" id="runs">
@@ -251,6 +277,7 @@ BmcChat.mount({
   historyId: 'welink-chat',
   latestButtonId: 'welink-latest',
   endpoint: '/welink/chat/stream',
+  groupId: {{ selected_group_id }},
   conversationId: {{ active_conversation.id }}
 });
 </script>

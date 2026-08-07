@@ -1,0 +1,14 @@
+[Unit]
+Description=BMC WeLink inspection scheduler
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=bmc-hub
+WorkingDirectory=/opt/bmc-hub
+EnvironmentFile=/opt/bmc-hub/.env
+ExecStart=/opt/bmc-hub/.venv/bin/python -m app.welink_scheduler
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/bmc-hub/data /opt/bmc-hub/uploads

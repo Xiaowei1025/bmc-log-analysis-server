@@ -1,1 +1,17 @@
-{% extends "base.html" %}{% block content %}<h1>发布工具</h1><p class="hint">发布后可持续新增版本；旧版本、下载次数和反馈都会保留。</p><form class="form editor-form glass" method="post" action="/tools" enctype="multipart/form-data" data-draft-key="tool-new" data-draft-label="工具发布草稿" data-pending-label="正在发布工具…">{{ csrf_input(request) }}<label>工具名称<input name="name" required></label><label>功能简述<input name="short_description" required></label><label>详细说明与使用方法<textarea name="details" required placeholder="支持多行，说明运行环境、参数、示例和注意事项。"></textarea></label><label>工具 Logo（可选）<input type="file" name="logo" accept="image/*"></label><label>首个版本号<input name="version" required placeholder="例如 1.0.0"></label><label>本版本更新说明<textarea name="release_notes" placeholder="首次发布"></textarea></label><label>工具文件<input type="file" name="package" required></label><button class="button primary" type="submit">发布工具</button></form>{% endblock %}
+{% extends "base.html" %}
+{% block content %}
+<section class="page-heading compact-heading"><div><a class="back" href="/tools">← 返回工具中心</a><p class="eyebrow">内网工具分发</p><h1>发布工具</h1><p>发布后可持续新增版本；旧版本、下载次数和反馈都会保留。</p></div></section>
+<form class="form editor-form glass" method="post" action="/tools" enctype="multipart/form-data" data-tool-editor-form data-draft-key="tool-new" data-draft-label="工具发布草稿" data-pending-label="正在发布工具…">
+  {{ csrf_input(request) }}
+  <div class="form-grid">
+    <label class="span-2">工具名称<input name="name" required placeholder="例如：BMC 日志采集工具"></label>
+    <label class="span-2">功能简述<input name="short_description" required placeholder="一句话说明工具解决什么问题"></label>
+    {% include "_tool_description_editor.html" %}
+    <label>工具 Logo（可选）<input type="file" name="logo" accept="image/*"><small>建议使用 PNG 或 SVG，便于在工具中心识别。</small></label>
+    <label>首个版本号<input name="version" required placeholder="例如 1.0.0"></label>
+    <label class="span-2">本版本更新说明（可选）<textarea name="release_notes" placeholder="首次发布可留空；后续版本请说明变更内容。"></textarea></label>
+    <label class="span-2">工具文件<input type="file" name="package" required><small>请上传已经过安全审核的工具包。默认单文件上限 200 MB。</small></label>
+  </div>
+  <button class="button primary" type="submit">发布工具</button>
+</form>
+{% endblock %}

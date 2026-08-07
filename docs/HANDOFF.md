@@ -2,14 +2,179 @@
 
 ## 当前状态
 
-- 版本：`0.9.2-local`
-- 更新日期：2026-08-02
+本次更新版本：0.9.17-local（`j00983211` 和 `j00456121` 均为默认最高管理员；华为 UniPortal OAuth2 授权码流程已收敛为只填 ClientID/Client_Secret，正式回调为 `/authorize`；应用管理、审计、WeLink 分组隔离、本地连接器协议和 systemd 调度 MVP 已完成）。
+
+- 版本：`0.9.17-local`
+- 更新日期：2026-08-07
 - 当前阶段：本地调试完成，**尚未部署到服务器**。
 - GitHub 代码仓库（公开）：`https://github.com/Xiaowei1025/bmc-log-analysis-server`。公开仓库只推送可复现源码、测试、部署配置、Handoff 和文档生成素材；绝不推送 `.env`、`data/`、`uploads/`、公司日志样例、真实 API Key 或本地交付包。公开后新增漏洞请按 `SECURITY.md` 报告，不要在 Issue 或 PR 中粘贴日志、Token 或客户信息。
 - 目标服务器：openEuler 24.03 `x86_64`、Python 3.11。
 - 运行架构：FastAPI + SQLite + Nginx/systemd（生产）或 Uvicorn（本地）。
 - 公开仓库保护：GitHub Secret Scanning、Push Protection 和 Dependabot 安全更新已开启；`.github/workflows/ci.yml` 会在 Python 3.11 上执行编译、单元测试和差异检查。仓库尚未选择软件许可证，外部复用前必须由负责人补充 LICENSE。
 - 公开安全告警修复已提交到后续 PR：`Jinja2==3.1.6`、`python-multipart==0.0.31`。合并该 PR 后重新查看 Dependabot 告警，确认 8 个旧告警全部关闭；不要在生产服务器只升级虚拟环境而忘记同步锁定版本文件。
+
+### 2026-08-07 0.9.17：新增第二位最高管理员
+
+- 服务器默认最高管理员允许列表由 `j00983211` 扩展为 `j00983211,j00456121`；两个工号通过 UniPortal UserInfo 登录时都获得 `admin`，均可看到“应用管理”、授予其他管理员、管理人员权限并查看审计。
+- 最高管理员允许列表高于普通群组角色同步开关。即使 `OAUTH_SYNC_ROLES=false`，已有的 `j00456121` 账号下次 OAuth 登录时也会自动修正为 `admin`，不需要删除账号或手工改 SQLite。
+- `.env.example`、README、OAuth 接入指南和生产验收清单已同步两个工号。若生产 `.env` 显式设置了 `OAUTH_SUPER_ADMIN_EMPLOYEE_IDS`，必须确认其值包含两者；显式环境变量会覆盖代码默认值。
+- 新增回归覆盖两个默认最高管理员、`j00456121` 既有账号在关闭普通角色同步时仍自动升级，以及普通管理员不能修改最高管理员。验证结果：`.venv312/bin/python -m compileall -q app tests`、`.venv312/bin/python -m unittest discover -s tests -q` 共 **88 项通过**，`git diff --check` 通过。
+
+### 2026-08-07：全量功能自测与上线前风险清单
+
+- 本轮执行 `.venv312/bin/python -m compileall -q app connector tests`、`.venv312/bin/python -m unittest discover -s tests -p 'test*.py' -v`、`python -m pip check` 和 `git diff --check`，共 **88 项通过**，依赖无缺失。浏览器逐一打开 `/`、`/welink`、`/logs`、`/reports`、`/features`、`/cases`、`/ask`、`/tools`、`/requests` 及发布/编辑页；未出现 404/500，控制台 error/warning 为空，桌面视口无横向溢出。生产模式在未配置桥接时正确阻止“开始巡检”，没有读取或发送真实消息。
+- **已确认的代码问题（下一轮应先修）**：`app/main.py:1418` 只识别 `delta.reasoning_content`/`delta.reasoning`，没有把供应商直接放在 `delta.content` 中的 `<think>...</think>` 转换成内部推理标记；公司模型若使用该格式，思考内容会以普通文本泄露，无法按页面逻辑折叠。必须补充流式跨 chunk 标签解析、异常/中断收口和回归测试。
+- **已确认的调度问题**：`app/welink_scheduler.py:19-48` 定时任务始终写入 Windows 连接器队列，没有复用 `/welink/runs` 的服务器桥接分支；若生产选择 `WELINK_AGENT_BRIDGE_URL` 而未启用连接器，手动巡检可以走桥接，定时巡检却会一直等待连接器。修复前不得把“桥接模式 + 定时任务”宣称为可用。
+- **生产前必须确认的权限边界**：`/reports`、`/reports/{id}`、`export.html` 当前对登录用户展示报告结果，只有原始日志下载和知识沉淀动作做了上传者/审核者/管理员校验。若公司 BMC 报告属于个人或项目机密，应在接入多人前增加项目/分组 ACL；如果确认报告可团队共享，则必须在页面和制度中明确这一点。
+- **生产配置风险**：部署 `.env` 若漏设 `APP_ENV=production`，普通贡献者仍可切换 WeLink 演示/生产模式；本地 `.env` 使用开发默认值是有意的测试行为，不可直接复制到服务器。当前本地仍是 `AUTH_PROVIDER=local`、无真实桥接和无真实 UniPortal 联调，故 OAuth、TLS 回调、真实 CLI 读取/发送和公司 BMC Skill 均未完成端到端验收。
+- **次要稳健性改进**：`app/main.py:2104-2114` 的工具版本接口未在服务端拒绝空版本号/空附件，编辑介绍接口也依赖浏览器 `required`；应补后端校验。`/welink/reports/generate` 在生产无台账时仍保存一份“未生成故障结论”的报告，建议禁用按钮或改成明确的空数据状态。定时器依赖服务器本地时区，部署文档应显式设置 Asia/Shanghai 或统一 UTC；长期多人使用仍需 PostgreSQL、后台任务队列、附件病毒扫描和 `/healthz` 探针。
+- **下一轮修复顺序**：① `<think>` 解析与测试；② 调度器桥接/连接器双路径和失败重试；③ 明确并落地报告 ACL；④ 工具版本后端校验与生产空报告交互；⑤ 在 openEuler 上联调 OAuth2、证书、timer、连接器 dry-run，再用授权测试群执行真实读写。修复后重新跑本节全部检查，不把本地演示通过当作生产完成。
+
+### 2026-08-07 0.9.16：固定华为 UniPortal OAuth2 授权码流程
+
+- 授权入口固定为 `https://uniportal.huawei.com/saaslogin1/oauth2/authorize`，正式回调路由新增 `/authorize`；旧 `/auth/oauth2/callback` 和 `/auth/oidc/callback` 只保留一个迁移版本，新应用登记必须使用 `${APP_BASE_URL}/authorize`。
+- 应用认证必填项收敛为 `OAUTH_CLIENT_ID` 和 `OAUTH_CLIENT_SECRET`。已删除 AK/SK Demo 适配器、`OAUTH_ADAPTER`、`OAUTH_ACCESS_KEY` 和 `OAUTH_SECRET_KEY`，避免内部 Agent 误配两套认证流程。
+- Token 和 UserInfo 暂以同一 UniPortal OAuth 根路径下的 `/token` 和 `/userinfo` 为默认值。这两个路径必须用公司 Demo 复核；如有差异，只在服务器覆盖 `OAUTH_TOKEN_URL`/`OAUTH_USERINFO_URL`，不改页面和业务代码。
+- 后端继续校验 `state`并使用 PKCE S256；Token 交换默认 `client_secret_basic`，access token 只用于同一回调中的 UserInfo 请求，不进入浏览器、SQLite、日志或 Git。
+- 下一位内部 Agent 不得再向负责人索要 AK/SK。只需通过受控渠道取得 ClientID/Client_Secret，再向负责人索要公司 Demo 以确认 Token/UserInfo URL、scope、UserInfo 工号/姓名字段和三类测试账号。真实 Secret 不得写入 README、Handoff、聊天、日志或 Git。
+- 测试覆盖“只配 ClientID/Client_Secret”时自动使用固定授权端点、同路径 Token/UserInfo 默认值和 `${APP_BASE_URL}/authorize`，并检查授权 URL 不泄露 Secret。验证结果：`.venv312/bin/python -m compileall -q app tests`、`.venv312/bin/python -m unittest discover -s tests -q` 共 **87 项通过**，`git diff --check` 通过；本地 8001 服务已重启，`/authorize` 在本地模式受控返回 `/login`，不再是 404。
+
+### 2026-08-06 0.9.13：案例编辑器双栏与草稿操作
+
+- Markdown 案例编辑器在窄窗口也保持“左侧书写、右侧实时预览”的双栏布局，预览区域独立滚动，不再自动上下堆叠；资源查询串更新为 `case-live-preview.css?v=0.8.3`。
+- 案例发布表单新增“保存草稿”和“取消发布”。保存使用现有浏览器本地草稿机制，能同步富文本编辑内容；取消会清除当前草稿并返回案例库（导入草稿仍可从导入页继续或取消）。
+- `app_interactions.js` 增加通用 `data-draft-save`/`data-draft-cancel` 钩子，其他表单可复用同一套交互，不重复实现本地草稿逻辑。
+- 验证结果：`.venv312/bin/python -m compileall -q app connector tests`、Node.js `--check`、`git diff --check` 和 `unittest` 共 **76 项通过**；浏览器实测 Markdown 编辑器两栏宽度均为 557px、预览位于书写区右侧，“保存草稿”状态变为“已保存草稿”，“取消发布”返回 `/cases`，再次打开页面显示“自动保存已开启”，确认草稿已清理。
+
+### 2026-08-06 0.9.12：WeLink 多人隔离、连接器协议和真实调度入口
+
+- `welink_groups`、`welink_group_members` 现在成为 WeLink 的访问边界。来源、接收方、巡检运行、问题、报告和问答上下文绑定当前分组；分组负责人/管理员可维护成员，普通成员不能修改共享配置，问题状态和行动项按可见分组校验。旧 SQLite 会在 `init_db()` 中补 `welink_issues.created_by`、回填运行归属并创建个人空间，不删除既有数据。
+- 新增 `/welink/groups` 分组创建/编辑/删除/成员管理；业务首页只保留当前分组选择，创建共享组、成员管理和分组编辑统一收进“分组设置”对话框，不再占用巡检业务内容区域。批量启停/删除、报告、定时规则和问答均携带分组。
+- 新增本地连接器 MVP：`/welink/connectors/pair` 一次性生成设备令牌；`/api/welink/connectors/heartbeat`、`jobs`、`ack`、`result` 实现心跳、5 分钟租约、重试边界、幂等任务和结构化结果回写。服务器不执行 `welink-cli`、不接收用户密码；`connector/windows_connector.py` 在没有公司 CLI 命令白名单前故意 fail-closed，并支持 `dry_run` 验证协议。
+- 新增 `welink_schedules` 和 `app/welink_scheduler.py`。`deploy/bmc-welink-scheduler.service` / `.timer` 每分钟只领取到期分组规则并创建幂等连接器任务，避免把调度放入 Uvicorn worker。生产部署需要启用 timer，并设置 `WELINK_CONNECTOR_ENABLED=1`。
+- 结果接口可将受控 JSON 中的 `issues`、`evidence`、`actions` 和 `report` 回写到当前分组，长度和类型均有边界；真实 CLI 子命令、JSON 样例、登录态位置和签名打包仍必须由公司内部提供后再接入。
+- 问答历史也按当前 WeLink 分组隔离：切换分组不会显示其他组的对话，重命名请求必须带同一分组，否则返回 404；新建对话和重命名后的返回地址会保留当前分组。
+- 修复无效分组查询的 SQLite 锁风险：显式校验不存在的 `group_id` 不再先创建个人空间或留下未提交事务，连续请求稳定返回受控 404/200。
+- 调度器回归现在覆盖到期分组、生产模式、来源绑定和同一分钟幂等：重复运行不会创建重复 `welink_runs`/`welink_jobs`。
+- 修复消息源/接收方“保存修改”点击后 404 的路由冲突：显式 `/edit` 路由现在注册在动态 `/{action}` 路由之前，保存后会保留当前分组并回到对应的 `#sources`/`#recipients` 区域；新增路由顺序回归测试，避免再次把 `edit` 当成普通操作解析。
+- 验证结果：`.venv312/bin/python -m compileall -q app tests`、`.venv312/bin/python -m unittest discover -s tests -p 'test*.py' -q` 共 **76 项通过**、`git diff --check` 通过，Node.js `--check`（共享交互脚本）通过；本地 8001 服务重启成功，匿名 `/` 返回 303 `/login`，未登录 `/welink` 返回 401；浏览器验收 `/welink` 分组设置对话框、编辑保存回跳、问答历史地址、`/cases/new` 图片/表格工具栏和 `/tools/new` 工具说明编辑器均正常渲染。未配对真实连接器、未读取/发送真实 WeLink 消息。
+
+#### 本轮仍未完成/需要内部配置的事项
+
+1. 华为登录已确认为 UniPortal OAuth2 授权码模式，不使用 OIDC 或 AK/SK 签名适配器。必填凭据只有 ClientID/Client_Secret，且必须从私密渠道写入服务器。内部 Agent 接手后应主动向负责人索要公司 Demo，确认 Token/UserInfo URL、scope、UserInfo 字段和三类测试账号，然后按 `docs/IDAAS_OAUTH.md` 先做 `hybrid` 灰度。
+2. 公司内部 WeLink CLI 的真实版本、读取/发送子命令、JSON 输出、登录态和命令白名单尚未提供；当前 Windows 连接器不会猜测命令，必须由内部 Agent 完成 `WeLinkCliAdapter` 并签名打包。
+3. systemd timer、HTTPS 反向代理、备份、病毒扫描和 PostgreSQL 迁移尚未在目标 openEuler 服务器执行；部署前按 `deploy/OPEN_EULER_24_03_X86_64.md` 做预检和授权测试群验收。
+
+### 2026-08-06 0.9.11：图片尺寸预设与编辑器拖拽缩放
+
+- 修复案例正文和工具说明编辑器的图片尺寸语义：原始现在清除宽度覆盖，只受容器 max-width 限制，不会把小图拉伸到编辑器宽度；25%/50%/75% 以图片的 naturalWidth 为基准换算成像素宽度并钳制到原图以内，避免“50%、75% 比原始还大”。
+- app/static/editor-media.js 提供共享的图片宽度规范化、旧 Markdown 百分比兼容、图片选择包装和拖拽手柄。点击富文本图片后会显示右下角圆形手柄，拖动即可改变宽度；案例和工具编辑器都通过同一套逻辑写回受控像素宽度 Markdown，切换模式、实时预览和重新加载后保持一致。
+- 预览和问答 Markdown 渲染完成后会统一规范化图片尺寸；图片加载完成后再计算自然宽度，避免 Windows Edge/Chrome 首次加载时使用容器宽度误算。
+- 修复旧 SQLite 数据库升级顺序：分组字段的索引在 group_id 补列之后创建，旧本地数据库可以正常启动且不会丢失已有巡检配置。并修复 WeLink 页面在数据库关闭后读取个人分组、以及遗漏传入当前对话的问题。
+- 验证结果：.venv312/bin/python -m unittest discover -s tests -p 'test*.py' 共 69 项通过；Node.js --check（共享媒体助手、工具编辑器）通过；git diff --check 通过。浏览器实测案例图片原始宽度 1672px：50% 写入 836px，原始清除 style.width；拖动右下角后写入 728px；工具编辑器同样完成 25%→708px。未提交案例、工具或真实 WeLink 数据。
+
+### 2026-08-06 0.9.10：统一提升 Markdown 表格可读性
+
+- 修复工具说明预览、案例正文/详情和智能问答中 Markdown 表格边框过浅的问题。`app/static/llm-output.css` 现在为表格容器、表头、单元格提供明确的高对比边框和底色，并加入斑马行、悬停反馈和超宽表格滚动；深色主题使用独立的浅色边框，避免与玻璃背景融合。
+- 富文本编辑器中的表格同步提升边框、表头和交替行对比度，保证编辑态与发布预览一致。保留安全 Markdown 渲染、列对齐和 Windows 窄窗口横向滚动能力。
+- 资源查询串更新为 `llm-output.css?v=0.8.1`、`case-editor.css?v=0.8.5`，避免 Windows Edge/Chrome 使用旧缓存。
+- 验证结果：`.venv312/bin/python -m unittest discover -s tests -q` 共 **68 项通过**，`git diff --check` 通过；浏览器工具预览实测表格单元格边框为高对比 `rgba(58,88,130,.38)`，表头底色和滚动容器均已生效，问答页面继续复用同一套样式。未提交或发布真实内容。
+
+### 2026-08-06 0.9.9：案例与工具说明统一文章编辑能力
+
+- 工具说明和案例正文继续保留现有轻量、无构建依赖编辑器，但通过 `app/static/editor-media.js` 共享图片读取、剪贴板检测、来源校验、尺寸限制和宽度规范化逻辑，避免 Windows 浏览器下两套编辑器行为漂移。
+- 两个编辑器均支持富文本/Markdown 的链接、表格、分隔线、代码块和图片；富文本编辑器可直接粘贴剪贴板 PNG/JPG/GIF/WebP，Markdown 文本框粘贴图片时也会插入图片语法。图片单张限制 2 MB，使用受控 `data:image/...` 保存，不执行原生 HTML 或脚本。
+- 图片宽度支持“原始、25%、50%、75%”四档。非原始尺寸保存为 `![alt](source){width=50%}` 或受限像素宽度，`llm_markdown.js` 会校验尺寸后渲染为 `max-width:100%`，工具详情、案例详情和实时预览保持一致。
+- 表格从富文本切换到 Markdown 时会转换为 GFM 表格；Markdown 切回富文本时会重建表格 DOM。链接仅接受 `http/https`，图片来源仅接受 `https` 或支持的图片 data URL，继续沿用原有 HTML 转义策略。
+- 未直接引入 Vditor/Tiptap：本次需求只需编辑器能力补齐，直接引入完整框架会增加构建产物和迁移风险。后续若要协作评论、拖拽上传、图片对象存储或复杂嵌套块，再按 `docs/OPEN_SOURCE_AND_MVP.md` 的评估结果选择 Vditor/Tiptap。
+- 验证结果：`.venv312/bin/python -m compileall -q app tests`、`.venv312/bin/python -m unittest discover -s tests -q` 共 **66 项通过**、`git diff --check`、Node.js `--check`（共享图片助手、工具编辑器、Markdown 渲染器和案例内联脚本）通过；浏览器实测工具说明页和案例正文页都可粘贴剪贴板图片、切换 Markdown 并设置图片宽度，工具页确认出现受控 `{width=50%}` 标记，案例页确认 75% 宽度样式生效。未点击发布或提交真实业务数据。
+
+### 2026-08-06 0.9.8：华为 IDaaS/OIDC 登录适配层
+
+- 新增 `app/oidc_auth.py` provider-neutral 适配器。它使用 OIDC Authorization Code + PKCE（S256）、Discovery、nonce、issuer/audience、ID Token 有效期和 JWKS 签名校验；服务器只通过环境变量读取客户端密钥，浏览器和 SQLite 不接触 Token/密钥。
+- `AUTH_PROVIDER` 支持 `local`、`hybrid`、`oidc`。本地默认行为不变；`hybrid` 适合迁移灰度；`oidc` 仅显示统一身份认证入口。新增 `/auth/login`、`/auth/oidc/callback` 和 `/auth/logout`，现有本地 `/login`、`POST /logout` 保留。
+- `users` 增加 `auth_provider`、`external_subject`、`email`、`display_name`、`last_login_at`，并以 `(auth_provider, issuer|sub)` 唯一关联外部身份。不会按同名用户名自动绑定，除非明确设置 `OIDC_AUTO_LINK_LOCAL=true`。
+- Claim 名称、管理员/审核者群组、是否自动开通和角色同步全部由 `.env` 配置。默认不覆盖已有本地角色；确认公司授权规则后才设置 `OIDC_SYNC_ROLES=true`。SAML 暂未实现，但后续可把结果转换为相同的标准身份结构而不改业务权限代码。
+- 新增 `docs/IDAAS_OIDC.md`，写明服务器配置、公司管理员需提供的引流问题、灰度/生产验证和故障排查边界。下一位内部 Agent 必须先向负责人索取 issuer/discovery、客户端信息、回调地址、工号 Claim、群组值、登出策略、网络证书和三类测试账号，禁止猜测内网配置。
+- 新增 `tests/test_oidc_auth.py`，覆盖模式/配置解析、PKCE URL 不泄漏密钥、Claim 标准化、角色映射、外部身份幂等开通和缺失配置拒绝。依赖新增 `Authlib==1.3.2`。
+- 验证结果：`.venv312/bin/python -m compileall -q app tests`、`.venv312/bin/python -m unittest discover -s tests -q` 共 **66 项通过**，`git diff --check` 通过；本地 8001 服务已重启，`/login`、`/auth/login`、`/auth/oidc/callback`、`/auth/logout` 均返回受控状态，不会出现原始 404/422。
+- 待部署：公司尚未提供真实 IDaaS 参数，本地仍使用 `AUTH_PROVIDER=local`；不能把测试客户端密钥、IDaaS URL 或内部群组写入公开仓库。公司确认后按 `docs/IDAAS_OIDC.md` 先 hybrid 灰度，再切换 oidc。
+
+### 2026-08-07 0.9.14：华为 IDaaS 改为纯 OAuth 2.0
+
+- `app/oidc_auth.py` 已改为 OAuth2-only 适配器：静态 Authorization、Token、UserInfo 三个端点由 `OAUTH_*` 配置，授权码使用 PKCE，Token 端点默认 `client_secret_basic`，身份只来自 Bearer access token 调用的 UserInfo。
+- 已移除运行时的 OIDC Discovery、issuer/audience/nonce、ID Token 和 JWKS 校验路径。旧的 `OIDCSettings`、`OIDCClient`、`/auth/oidc/callback` 仅保留一版本兼容别名，但执行的仍是 OAuth2 流程；新部署只能配置 `AUTH_PROVIDER=oauth2` 或 `hybrid`。
+- 新增 `OAUTH_TENANT_ID`、`OAUTH_TENANT_PARAM`、`OAUTH_TENANT_LOCATIONS`，不把 TenantID 或华为内部地址硬编码。UserInfo 的稳定 ID、工号、显示名、群组 Claim 和角色映射全部可配置。
+- `/auth/login` 保留不变，并新增 `/auth/oauth2/login`、`/auth/oauth2/callback`；错误 state、Token 失败、UserInfo 不可达和缺少稳定 ID 都回到受控登录错误页，不泄露密钥。
+- `.env.example`、README 和 `docs/IDAAS_OAUTH.md` 已同步；`docs/IDAAS_OIDC.md` 只保留历史文件名提示。真实 Client Secret、应用域名和工号没有写入任何公开文件。
+- 新增 `tests/test_oauth2_auth.py`，覆盖端点配置、PKCE/租户参数、Basic 认证、UserInfo 身份标准化和缺少 UserInfo 端点；全量验证 `.venv312/bin/python -m compileall -q app tests`、`.venv312/bin/python -m unittest discover -s tests -q` 共 **80 项通过**。
+- 当前仍保持 `AUTH_PROVIDER=local`，尚未接入公司真实端点；下一位内部 Agent 必须先向负责人索取 Authorization/Token/UserInfo URL、TenantID 传递规则、Claim 名称和测试账号，不能把用户提供的 Secret 写入代码、日志或 GitHub。
+- 公司若只提供 AK/SK Demo，不要新增网页配置页面或把 AK/SK 当作普通用户凭证；设置 `OAUTH_ADAPTER=huawei_demo`，仅在受控服务器环境变量提供 `OAUTH_ACCESS_KEY`/`OAUTH_SECRET_KEY`，实现 `app/idaas_adapter.py` 后再验收。
+
+### 2026-08-07 0.9.15：华为工号默认管理员与应用管理
+
+- 生产 OAuth2 登录页只显示华为工号登录；本地/混合模式仍保留本地账号用于迁移和应急。OAuth2 UserInfo 返回指定的最高管理员工号时默认映射为 `admin`；0.9.17 起默认名单为 `j00983211,j00456121`，可由 `OAUTH_SUPER_ADMIN_EMPLOYEE_IDS` 在服务器环境覆盖，不在网页配置。
+- 新增仅管理员可见的 `/admin` 应用管理入口。管理员可以把其他人员设置为贡献者或审核者；只有最高管理员可以授予新的管理员，不能修改自己或降权最高管理员。普通用户访问 `/admin` 返回 403，导航不显示入口。
+- 新增 `audit_events` 审计表与中间件，记录登录认证、OAuth2 回调、退出、管理员页面访问、权限修改和其他状态变更请求的人员、时间、资源、状态码和客户端基本信息。审计主动排除查询参数、表单正文、密码、Token、AK/SK、上传内容。
+- 新增 `app/templates/admin.html`、`app/static/admin.css` 和 `tests/test_admin_management.py`；数据库启动时自动创建审计表和索引，不删除既有用户或业务数据。
+- 验证结果：`.venv312/bin/python -m compileall -q app tests`、`.venv312/bin/python -m unittest discover -s tests -q` 共 **86 项通过**，本地 8001 服务已重启；`GET /auth/login` 在本地模式仍受控返回登录页，`GET /auth/login` 会写入不含敏感内容的审计记录。
+
+### 2026-08-06：开源复用与 MVP 架构评审
+
+- 新增 `docs/OPEN_SOURCE_AND_MVP.md`。评审了 Open WebUI、LibreChat、Dify、Tiptap、Vditor、TOAST UI Editor、Authlib、APScheduler、n8n 以及 Graylog/Loki/OpenSearch 等项目的维护信号、许可证和部署成本。
+- 最终决策：保留当前 FastAPI + Jinja + SQLite 主干；Authlib 直接复用，编辑器按需采用 Vditor/Tiptap，MVP 定时任务使用 systemd timer；不把 Dify/Open WebUI/n8n/Celery/OpenSearch 引入核心链路。
+- 未找到可以证明兼容公司内部 WeLink CLI、持续维护且许可证清晰的可靠开源连接器。WeLink 必须自研 Windows 本地连接器，由用户电脑执行自己的 CLI，服务器只管理任务、审计和标准化结果。
+- 多人生产使用前的架构 P0 是数据隔离：当前 `welink_issues`、证据和行动项缺少完整的用户/租户归属，部分更新按全局 ID 处理；下一步必须补 owner/tenant 条件，再接真实连接器。
+- MVP 连接器最小协议建议为：配对、创建任务、轮询任务、上传结果、确认/失败；必须包含租约、幂等键、心跳、重试和取消。真实自动化不能只依赖当前“保存时间规则”的页面状态。
+
+### 2026-08-06 0.9.7：管理员删除工具
+
+- 工具详情页仅对 `admin` 角色显示“删除工具”按钮；普通贡献者和审核者既看不到按钮，直接调用 `POST /tools/{tool_id}/delete` 也会得到 403。
+- 删除接口在数据库事务中先清理下载记录、反馈、版本和工具主记录，再删除 `uploads/tools` 与 `uploads/logos` 下属于当前上传根目录的附件；失败会回滚数据库，路径不在上传根目录时不会被删除。
+- 删除使用全站玻璃确认框和处理中状态，成功返回 `/tools`。工具作者的介绍/版本发布权限不变，管理员删除不改变其他工具和日志报告。
+- 新增工具发布删除回归测试与工具详情权限渲染测试；导航契约覆盖删除 POST 路由，并要求确认属性和 CSRF。
+- 验证结果：`.venv312/bin/python -m unittest discover -s tests -q` 共 **60 项通过**；`compileall` 与 `git diff --check` 通过。未删除本地现有工具，删除测试使用独立临时目录。
+
+### 2026-08-06 0.9.6：需求板可追溯修改与重新评审
+
+- 需求提交人可通过 `/requests/{id}/edit` 修改自己提交的需求，不区分当前是待评审、已采纳、规划中、已实现还是暂不处理；其他账号访问编辑页或提交修改会返回 403。
+- 新增 `requirement_revisions` 版本表。创建需求时写入版本 1；每次修改先保存新的不可覆盖版本，再更新当前需求。修改已评审需求会将当前状态自动重置为 `pending`，历史评审事件不会删除。
+- `requirement_review_events.revision_id` 关联评审时对应的版本，历史数据库会在 `init_db()` 中补建版本 1 并回填旧评审记录。新的评审只绑定当前版本，详情页同时展示版本内容和评审时间线。
+- 需求详情页新增“修改需求”、当前版本提示、提交历史和“修改后重新评审”说明；编辑表单提供取消入口。需求列表和帮助文案已同步更新。
+- 新增 `tests/test_requirement_workflow.py`，覆盖创建、评审、已采纳后修改、状态重置、历史版本/评审绑定和越权访问；导航契约已覆盖新增 GET/POST 路由。
+- 验证结果：`.venv312/bin/python -m unittest discover -s tests -q` 共 **58 项通过**；`compileall` 与 `git diff --check` 通过。未修改现有需求数据，临时测试使用独立 SQLite。
+
+### 2026-08-06 0.9.5：工具说明图片、取消编辑与详情渲染
+
+- 工具发布/编辑共用的说明编辑器新增“图片”按钮和隐藏文件选择器，支持 PNG/JPG/GIF/WebP；浏览器端限制单张 2 MB，图片读取为 `data:image/...` 后以内嵌 Markdown 保存，服务端仍只接收原有 `details` 字段，不新增数据库列。
+- `app/static/llm_markdown.js` 新增受限图片语法：只渲染 HTTPS 图片或受支持的图片 data URL，并对来源和替代文本先转义；工具详情页改为安全 Markdown 渲染，因此标题、粗体、列表、表格和图片在发布后与预览一致。不要把详情内容直接改回未经转义的 `innerHTML`。
+- 工具详情正文行距调整为 1.5 倍；工具介绍编辑页底部新增“取消编辑”，返回 `/tools/{id}`，不会提交或改写草稿。资源查询串已提升：`llm_markdown.js?v=0.7.3`、`tool-editor.js?v=0.1.1`、`tool-detail.css?v=0.8.6`，避免 Windows 浏览器继续使用旧缓存。
+- 新增/扩展 `tests/test_tool_editor_ui.py` 与 `tests/test_tool_detail_ui.py`：检查图片入口、图片安全渲染、取消链接、详情 Markdown 容器和 1.5 倍行距。未执行真实工具上传或修改，不包含业务数据和图片附件。
+- 验证结果：`.venv312/bin/python -m unittest discover -s tests -q` 共 **56 项通过**；`compileall`、Node.js `--check`（工具编辑器与 Markdown 渲染器）和 `git diff --check` 通过。
+
+### 2026-08-04 0.9.4：问答输入快捷键统一
+
+- `/ask` 与 `/welink#chat` 共用 `app/static/chat_runtime.js`，现在普通 Enter 和 Shift+Enter 都只换行，Windows/Linux 使用 Ctrl+Enter、macOS 使用 Command+Enter 发送。
+- 两个输入框的 placeholder、README、测试清单和交接说明已同步更新，避免用户继续按旧提示操作。
+- `base.html` 将运行时脚本查询串从 `v=0.9.1` 提升为 `v=0.9.2`，避免 Windows Edge/Chrome 缓存旧的 Enter 发送逻辑。
+- 新增回归断言确认两个页面均显示“Enter 换行，Ctrl/⌘+Enter 发送”，并确认旧的 `Enter && !Shift` 发送分支不存在。
+- 验证结果：`.venv312/bin/python -m compileall -q app tests`、`.venv312/bin/python -m unittest discover -s tests -q` 共 **55 项通过**，`git diff --check` 通过；本地静态资源已确认返回 Ctrl/⌘+Enter 逻辑。
+
+### 2026-08-04 0.9.3：工具说明编辑器与发布链路
+
+- 工具首次发布和工具介绍编辑页的“详细说明与使用方法”统一复用案例库的编辑体验：富文本/Markdown 切换、格式工具栏、Windows `Ctrl+B`、Markdown 实时安全预览、草稿自动保存，以及参数表格、代码块和脱敏提示。
+- 新增 `app/templates/_tool_description_editor.html` 和 `app/static/tool-editor.js`。工具说明仍提交到原有 `details` 字段并保存为 Markdown，不改变工具、版本、下载和反馈数据结构；编辑已有工具时会把历史 Markdown 载入富文本模式。
+- 发布页增加推荐说明结构和常用 Markdown 语法折叠提示；详细说明为空时在页面内提示，不再依赖浏览器对隐藏 textarea 的原生报错。工具文件仍为必填，首次发布更新说明可留空。
+- 新增 `tests/test_tool_editor_ui.py`，覆盖新建/编辑模板、运行时脚本、实时预览和提交同步；此前工具发布接口测试继续覆盖空更新说明的 303 成功跳转。
+- 本次没有数据库 schema 迁移，也没有提交真实工具文件。浏览器实测工具发布页：Markdown 输入可实时渲染标题、粗体和 GFM 表格，切回富文本后编辑器可见，控制台无错误；未点击真实发布。
+- 验证结果：`.venv312/bin/python -m compileall -q app tests`、`.venv312/bin/python -m unittest discover -s tests -q` 共 **55 项通过**、`git diff --check` 通过。
+
+### 2026-08-04：工具发布表单修复
+
+- 修复工具首次发布接口 `/tools` 将可选的“本版本更新说明”误声明为必填的问题。页面原本允许留空，但 FastAPI 会在请求进入处理器前返回 422；现在后端使用 `Form("")`，空值会安全保存为空字符串，首次发布无需填写更新说明。
+- 新增 `tests/test_tool_publish.py`，使用临时 SQLite 和上传目录验证：不填写更新说明时仍能创建工具和首个版本、返回 303 到 `/tools/{id}`、文件确实落盘且数据库保留空更新说明。OpenAPI 请求体的必填字段不再包含 `release_notes`。
+- 本次未修改数据库结构、真实工具文件或业务数据。当前本地服务已重启在 `127.0.0.1:8001`；浏览器若仍显示旧的错误页，请重新打开工具中心或刷新页面。
+- 验证结果：`.venv312/bin/python -m unittest discover -s tests -q` 共 **52 项通过**；工具发布相关导航测试和 `git diff --check` 均通过。未执行真实工具发布。
 
 ### 2026-08-02 0.9.2：全站导航契约与标准回归测试
 
@@ -184,10 +349,11 @@
 | `app/templates/` | 深浅色液态玻璃 UI；`knowledge_case_*.html` 为案例库（发布页可切换富文本/Markdown），`feature_assist.html` 为来源日志 AI 复核；`stream_script.html` 消费报告/复核流，`ask.html` 消费问答流。 |
 | `app/static/case-editor.css` | 发布案例的编辑器切换、富文本工具栏、Markdown 预览与语法说明对话框；包含深浅色模式的对比度样式。 |
 | `app/static/case-import.css` | 案例导入入口、待发布草稿提示、来源资料和深浅色样式。 |
-| `app/templates/tool_detail.html` / `app/static/tool-detail.css` | 工具详情、版本历史、下载、发布和反馈的分层液态玻璃界面；不得绕过原有权限、计数和历史留存路由。 |
-| `app/static/llm_markdown.js` | 无外部 CDN 的安全 Markdown 渲染器；先转义模型内容，再渲染标题、列表、强调、引用、代码和 HTTPS 链接。 |
+| `app/templates/tool_detail.html` / `app/static/tool-detail.css` | 工具详情、版本历史、下载、发布和反馈的分层液态玻璃界面；管理员删除按钮由服务端角色再次校验，删除前清理附件和关联记录。 |
+| `app/static/llm_markdown.js` | 无外部 CDN 的安全 Markdown 渲染器；先转义模型内容，再渲染标题、列表、强调、引用、代码、HTTPS 链接和受限图片语法。 |
 | `app/static/app_interactions.js` | 全局表单锁定、站内确认框、长表单本地草稿、通知和窄屏抽屉导航；不得把密码、文件或 CSRF 写入草稿。 |
 | `app/static/upload_runtime.js` / `app/static/workflow.css` | 日志上传文件清单与前端预检，以及报告筛选、上下文卡、空状态、草稿提示和响应式样式。 |
+| `requirement_requests` / `requirement_revisions` / `requirement_review_events` | 需求当前版本、不可覆盖的提交版本和按版本绑定的评审历史；提交人修改后当前状态回到待评审。 |
 | `tests/test_workflow_interactions.py` | 报告筛选、从报告创建特征/案例关系，以及上传、草稿、抽屉和空状态的回归测试。 |
 | `requirement_requests` / `requirement_review_events` | 需求原文、当前状态和不可覆盖的评审历史。 |
 | `feature_versions` / `analysis_matches.feature_version` | 特征版本快照与规则命中版本；只把与当前 `cases.rule_version` 相同的命中作为当前结果，旧记录用于追溯。 |
@@ -294,10 +460,10 @@ LLM_MODEL=deepseek-v4-flash
 
 `deepseek-v4-pro` 也可直接替换 `LLM_MODEL`；无需改动代码。真实 API Key 只允许写入部署环境的 `.env`。
 
-## 部署前检查与 openEuler AArch64
+## 部署前检查与 openEuler 24.03 x86_64
 
 1. 使用交付包，不携带 `data/`、`uploads/`、`.env` 或 `.venv*`。
-2. 确认 `python3 --version` 不低于 3.10，`uname -m` 为 `aarch64`。
+2. 确认 `python3 --version` 为 3.11（或兼容的 3.10+）且 `uname -m` 为 `x86_64`。
 3. 原生依赖建议：`python3 python3-pip python3-devel gcc nginx firewalld policycoreutils-python-utils`。需要导入旧版 DOC/PPT 时，额外安装 LibreOffice，并通过 `CASE_IMPORT_SOFFICE` 指向 `soffice`。
 4. 生产 `.env` 必须设置 `APP_ENV=production`、随机 `APP_SECRET`、`SESSION_HTTPS_ONLY=true` 与 `ALLOW_SELF_REGISTRATION=false`。应用会拒绝默认密钥或非 HTTPS Cookie。
 5. 先运行 `.venv/bin/python scripts/manage_users.py create --username bmc-admin --role admin` 创建首位管理员；再按需用 `set-role` 分配审核者。除非临时本地演示，否则不要开启网页自助注册。
@@ -314,13 +480,13 @@ LLM_MODEL=deepseek-v4-flash
 - 相关 SQLite 表：`welink_sources`、`welink_recipients`、`welink_runs`、`welink_issues`、`welink_issue_evidence`、`welink_issue_actions`、`welink_reports`、`welink_chat_messages`、`app_settings`。`init_db()` 会为既有数据库补建新表。
 - 演示模式的三张问题卡明确标记 `is_demo=1`；切换至生产模式时页面和报告会自动排除这些模拟卡片，避免模拟告警混入真实通报。生产桥接尚未返回问题数据时，报告只会说明“未收到台账”，不会编造结论。
 - `/welink/chat/stream` 使用服务器端当前激活的模型档案；会话按登录用户保存，回答支持 Markdown 表格。无 Key 或模型不可用时沿用本地台账降级输出。不得把 Key 写入数据库、前端或交接文档。
-- `/welink/schedule` 目前仅保存启用状态和时间规则（默认 08:00 Asia/Shanghai），**不含后台调度器**。公司内网接入时需要由受控 systemd timer / 企业调度器调用巡检桥接，并读取这些规则；在此之前不能声称会自动执行。
-- 生产读取与发送唯一入口是 `WELINK_AGENT_BRIDGE_URL` + `WELINK_AGENT_BRIDGE_TOKEN` 的固定 `/v1/welink/runs` 合约；网页与 Python 均不得直接调用 WeLink CLI 或 shell。桥接需补充“返回问题、证据、行动项、报告投递结果”的受控写回合约，才能形成真实数据闭环。
+- `/welink/schedule` 现在按分组保存启用状态和时间规则（默认 08:00），`app.welink_scheduler` + `deploy/bmc-welink-scheduler.timer` 每分钟创建幂等连接器任务；目标 openEuler 部署时仍需启用 timer，并查看 journal 日志。
+- 生产读取与发送可以选择固定桥接合约，或 `WELINK_CONNECTOR_ENABLED=1` 的 Windows 本地连接器合约；两者都不执行任意 shell。连接器返回的“问题、证据、行动项、报告”会写回当前分组；真实 CLI 命令仍待公司内部提供。
 - `app/static/llm_markdown.js` 已支持 GitHub 风格 Markdown 表格（表头、分隔行、对齐、转义竖线）；`base.html` 用版本查询串刷新缓存。不要把流式输出直接使用 `innerHTML`，必须继续经此转义渲染器。
-- `/ask` 与 `/welink#chat` 已统一为同一套对话样式（`chat-shell`、`chat-head`、`chat-history`、`chat-bubble`、`chat-composer`）：蓝紫用户气泡、玻璃助手气泡、相同的 Markdown/表格样式、Enter 发送与 Shift+Enter 换行。两处均显示“运维助手”；区别只保留在回答上下文（知识库或 WeLink 巡检台账）。
+- `/ask` 与 `/welink#chat` 已统一为同一套对话样式（`chat-shell`、`chat-head`、`chat-history`、`chat-bubble`、`chat-composer`）：蓝紫用户气泡、玻璃助手气泡、相同的 Markdown/表格样式、普通 Enter 换行与 Ctrl/⌘+Enter 发送。两处均显示“运维助手”；区别只保留在回答上下文（知识库或 WeLink 巡检台账）。
 - 问答流支持带思考过程的 OpenAI 兼容模型：`llm_stream(..., include_reasoning=True)` 识别流式 `delta.reasoning_content`（兼容 `delta.reasoning`），并用 `[[BMC_REASONING_START]]` / `[[BMC_REASONING_END]]` 分隔后保存到各自的历史记录。普通报告分析仍默认不输出思考过程。
 - `BmcMarkdown.renderAssistantTo()` 负责问答专用渲染：推理尚在流式返回时 `<details>` 默认展开并显示“正在思考…”；最终答案开始后自动折叠为“思考过程（点击展开）”；用户之后仍可手动展开。标记和推理文本都不得直接拼入 `innerHTML`，必须继续经过本地转义后的 Markdown 渲染。
-- 两个问答入口同时支持 Enter、Ctrl+Enter 和 macOS ⌘+Enter 发送，Shift+Enter 换行。输入区只保留一个操作按钮：空闲时显示“发送”，流式请求开始后原位切换为红色“停止”，结束或中止后恢复“发送”，不再额外显示第二个停止按钮。点击“停止”后通过 `AbortController.abort()` 和 `ReadableStream.cancel()` 中止浏览器读取，保留已生成内容并显示“已停止生成”。
+- 两个问答入口统一为普通 Enter 换行、Ctrl+Enter 和 macOS ⌘+Enter 发送；Shift+Enter 也保持换行。输入区只保留一个操作按钮：空闲时显示“发送”，流式请求开始后原位切换为红色“停止”，结束或中止后恢复“发送”，不再额外显示第二个停止按钮。点击“停止”后通过 `AbortController.abort()` 和 `ReadableStream.cancel()` 中止浏览器读取，保留已生成内容并显示“已停止生成”。
 - 服务端流生成器使用 `try/finally` 保存已经产生的部分回答。若客户端中途断开，会补齐未闭合的思考标记并追加“回答生成已中断”，因此刷新页面后仍可追溯部分结果；在尚未返回任何字符时只保留用户问题，不创建空助手记录。
 - 最终拓扑已确认为“Windows Edge/Chrome 客户端 → 公司 HTTPS 域名/Nginx → openEuler 24.03 x86_64 + Python 3.11/FastAPI”。`127.0.0.1:8000` 只用于服务器内部 Nginx 反代，不能发给 Windows 用户作为访问地址；浏览器不安装 Python、WeLink CLI，也不依赖 Google 登录。
 - Nginx 的四类 LLM 流接口必须保持 `proxy_buffering off`、`proxy_cache off`、`gzip off` 和 300 秒读写超时，保证 Windows 上流式输出与手动停止及时生效。`browser_compat.js` 会检测 Fetch、ReadableStream、AbortController 和 TextDecoder；缺失时提示升级到公司批准的 Edge/Chrome。

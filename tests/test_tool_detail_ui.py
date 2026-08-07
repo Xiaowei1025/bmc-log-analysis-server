@@ -46,13 +46,29 @@ class ToolDetailUiTests(unittest.TestCase):
         self.assertIn('action="/tools/2/versions"', rendered)
         self.assertIn('action="/tools/2/feedback"', rendered)
         self.assertIn("修改介绍", rendered)
+        self.assertIn('class="tool-description markdown-output" data-markdown', rendered)
+        self.assertIn('BmcMarkdown.renderTo', rendered)
         self.assertNotIn('<main class="tool-detail-main">', rendered)
+
+    def test_only_admin_sees_delete_tool_action(self):
+        def render_for(role):
+            return main.templates.get_template("tool_detail.html").render(
+                request=SimpleNamespace(url=SimpleNamespace(path="/tools/2"), session={}),
+                user=SimpleNamespace(id=99, username="admin", role=role),
+                tool=SimpleNamespace(id=2, name="工具", short_description="简介", details="说明", username="owner", created_by=7, created_at="now", logo_path=""),
+                versions=[], feedback=[], error=None, notice=None, help_title="帮助", help_text="测试",
+                role_label=main.role_label, csrf_token="test-token", registration_enabled=False,
+            )
+
+        self.assertNotIn('action="/tools/2/delete"', render_for("contributor"))
+        self.assertIn('action="/tools/2/delete"', render_for("admin"))
+        self.assertIn("data-confirm-title=\"删除内部工具\"", render_for("admin"))
 
     def test_tool_detail_uses_layered_glass_and_strong_button_feedback(self):
         css = (self.root / "app/static/tool-detail.css").read_text(encoding="utf-8")
         base = (self.root / "app/templates/base.html").read_text(encoding="utf-8")
 
-        self.assertIn("/static/tool-detail.css?v=0.8.5", base)
+        self.assertIn("/static/tool-detail.css?v=0.8.6", base)
         self.assertIn(".tool-detail-hero", css)
         self.assertIn("backdrop-filter:blur(34px) saturate(165%)", css)
         self.assertIn(".tool-surface", css)
@@ -61,6 +77,8 @@ class ToolDetailUiTests(unittest.TestCase):
         self.assertIn("0 13px 28px rgba(42,101,205,.34)", css)
         self.assertIn(".tool-download-button:hover", css)
         self.assertIn(".tool-download-button:active", css)
+        self.assertIn("line-height:1.5", css)
+        self.assertIn(".tool-description img", css)
         self.assertIn("html[data-theme=dark] .tool-detail-hero", css)
         self.assertIn("@media(max-width:960px)", css)
         self.assertIn("@media(max-width:700px)", css)

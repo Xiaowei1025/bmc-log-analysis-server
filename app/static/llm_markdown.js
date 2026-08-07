@@ -3,7 +3,7 @@
 window.BmcMarkdown=(()=>{
   const reasoningStart='[[BMC_REASONING_START]]',reasoningEnd='[[BMC_REASONING_END]]';
   const escape=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-  const inline=source=>{const codes=[];let value=escape(source).replace(/`([^`]+)`/g,(_,code)=>`@@BMC_CODE_${codes.push(code)-1}@@`);value=value.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/__([^_]+)__/g,'<strong>$1</strong>').replace(/\*([^*]+)\*/g,'<em>$1</em>').replace(/(^|[^\w])_([^_]+)_/g,'$1<em>$2</em>');return value.replace(/@@BMC_CODE_(\d+)@@/g,(_,index)=>`<code>${codes[Number(index)]}</code>`)};
+  const inline=source=>{const codes=[],images=[];const imageMarked=String(source??'').replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+|data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+)\)(?:\{width=((?:25|50|75|100)%|(?:[1-9]\d{1,2})px)\})?/g,(_,alt,src,size)=>`@@BMC_IMAGE_${images.push({alt,src,size})-1}@@`);let value=escape(imageMarked).replace(/`([^`]+)`/g,(_,code)=>`@@BMC_CODE_${codes.push(code)-1}@@`);value=value.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/__([^_]+)__/g,'<strong>$1</strong>').replace(/\*([^*]+)\*/g,'<em>$1</em>').replace(/(^|[^\w])_([^_]+)_/g,'$1<em>$2</em>');value=value.replace(/@@BMC_IMAGE_(\d+)@@/g,(_,index)=>{const image=images[Number(index)];if(!image)return '';const size=/^(?:25|50|75|100)%$|^(?:[1-9]\d{1,2})px$/.test(image.size||'')?image.size:'';const style=size?` style="width:${size};max-width:100%;height:auto"`:'';return `<img src="${escape(image.src)}" alt="${escape(image.alt)}" loading="lazy" decoding="async"${style} data-image-width="${escape(size)}">`});return value.replace(/@@BMC_CODE_(\d+)@@/g,(_,index)=>`<code>${codes[Number(index)]}</code>`)};
   const cells=line=>line.trim().replace(/^\||\|$/g,'').split('|').map(cell=>cell.trim().replace(/\\\|/g,'|'));
   const divider=line=>line.includes('|')&&cells(line).length>0&&cells(line).every(cell=>/^:?-{3,}:?$/.test(cell.replace(/\s/g,'')));
   function render(source){
@@ -31,10 +31,11 @@ window.BmcMarkdown=(()=>{
     const answerHtml=answer?`<div class="assistant-final">${render(answer)}</div>`:(end<0?'':'<p class="assistant-empty-final">模型未返回最终答案。</p>');
     return `<details class="assistant-reasoning"${open}><summary>${summary}</summary><div class="assistant-reasoning-body">${reasoningHtml}</div></details>${answerHtml}`;
   }
+  const normalizeImages=element=>{if(window.BmcEditorMedia&&typeof window.BmcEditorMedia.normalizeRenderedImages==='function')window.BmcEditorMedia.normalizeRenderedImages(element)};
   return{
     render,
-    renderTo(element,source){element.innerHTML=render(source)},
+    renderTo(element,source){element.innerHTML=render(source);normalizeImages(element)},
     renderAssistant,
-    renderAssistantTo(element,source,options={}){element.innerHTML=renderAssistant(source,Boolean(options.streaming))}
+    renderAssistantTo(element,source,options={}){element.innerHTML=renderAssistant(source,Boolean(options.streaming));normalizeImages(element)}
   }
 })();

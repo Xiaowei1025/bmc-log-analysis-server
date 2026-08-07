@@ -57,26 +57,16 @@ html[data-theme="dark"] .case-editor-block[data-editor-mode="markdown"] .case-pr
   background:rgba(7,18,35,.62);
   border-color:rgba(168,195,237,.34);
 }
+/* Keep writing and preview side by side even in a narrow Windows browser. The
+   columns are allowed to shrink, while the preview itself remains scrollable. */
 @media(max-width:860px){
   .case-editor-block[data-editor-mode="markdown"]{
-    grid-template-columns:minmax(0,1fr);
-    grid-template-rows:auto auto auto auto;
-    row-gap:0;
+    grid-template-columns:minmax(0,1.08fr) minmax(230px,.92fr);
+    column-gap:10px;
   }
-  .case-editor-block[data-editor-mode="markdown"] .case-editor-head,
-  .case-editor-block[data-editor-mode="markdown"] .rich-toolbar,
-  .case-editor-block[data-editor-mode="markdown"] .case-markdown-input,
   .case-editor-block[data-editor-mode="markdown"] .case-preview{
-    grid-column:1;
+    min-height:360px;
+    max-height:68vh;
   }
-  .case-editor-block[data-editor-mode="markdown"] .case-editor-head{grid-row:1}
-  .case-editor-block[data-editor-mode="markdown"] .rich-toolbar{grid-row:2}
-  .case-editor-block[data-editor-mode="markdown"] .case-markdown-input{grid-row:3}
-  .case-editor-block[data-editor-mode="markdown"] .case-preview{
-    grid-row:4;
-    position:static;
-    min-height:280px;
-    max-height:none;
-    margin-top:14px;
-  }
+  .case-editor-block[data-editor-mode="markdown"] .case-editor-head small{max-width:100%}
 }

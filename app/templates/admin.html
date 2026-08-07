@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}应用管理 · 硬件运维工作台{% endblock %}
+{% block content %}
+<section class="page-hero compact-hero">
+  <div><p class="eyebrow">仅管理员可见</p><h1>应用管理</h1><p>管理平台人员权限，查看登录和关键操作审计。密钥、Token 和日志正文不会显示在这里。</p></div>
+  <div class="hero-actions"><span class="status-chip success">最高管理员：{{ super_admin_ids|join('、') }}</span></div>
+</section>
+
+{% if request.query_params.get('notice') == 'permission_saved' %}<div class="notice success" role="status" data-transient>人员权限已更新。</div>{% endif %}
+
+<section class="admin-grid">
+  <article class="panel glass admin-users-panel">
+    <div class="section-title"><div><p class="eyebrow">人员与权限</p><h2>账号管理</h2></div><span class="count-chip">{{ users|length }} 人</span></div>
+    <div class="admin-user-list">
+      {% for item in users %}
+      <article class="admin-user-card">
+        <div class="admin-user-main">
+          <div><h3>{{ item.display_name or item.username }}</h3><p class="muted">{{ item.username }}{% if item.email %} · {{ item.email }}{% endif %}</p></div>
+          <span class="role-chip role-{{ item.role }}">{{ role_label(item.role) }}</span>
+        </div>
+        <p class="muted">登录方式：{{ item.auth_provider or 'local' }} · 最近登录：{{ item.last_login_at or '尚未登录' }} · 创建：{{ item.created_at }}</p>
+        {% if item.username|lower in super_admin_ids %}
+        <p class="notice warning compact-notice">最高管理员账号，不能被其他管理员降权。</p>
+        {% else %}
+        <form method="post" action="/admin/users/{{ item.id }}/role" class="admin-role-form" data-pending-label="保存中…">
+          {{ csrf_input(request) }}
+          <label>权限<select name="role"><option value="contributor"{% if item.role == 'contributor' %} selected{% endif %}>贡献者</option><option value="reviewer"{% if item.role == 'reviewer' %} selected{% endif %}>审核者</option>{% if can_manage_admins %}<option value="admin"{% if item.role == 'admin' %} selected{% endif %}>管理员</option>{% endif %}</select></label>
+          <button class="button small" type="submit">保存权限</button>
+        </form>
+        {% endif %}
+      </article>
+      {% else %}<p class="empty">暂无账号。</p>{% endfor %}
+    </div>
+  </article>
+
+  <article class="panel glass admin-audit-panel">
+    <div class="section-title"><div><p class="eyebrow">可追溯记录</p><h2>登录与操作审计</h2></div><span class="count-chip">最近 {{ audit_events|length }} 条</span></div>
+    <p class="muted">记录谁在什么时候登录、退出、修改权限或提交关键操作；不记录密码、Token、AK/SK 和表单正文。</p>
+    <div class="audit-table-wrap"><table class="audit-table"><thead><tr><th>时间</th><th>人员</th><th>操作</th><th>资源</th><th>结果</th></tr></thead><tbody>
+      {% for event in audit_events %}<tr><td>{{ event.created_at }}</td><td>{{ event.actor_name or event.actor_username or '匿名' }}</td><td>{{ event.action }}</td><td><code>{{ event.resource }}</code></td><td><span class="audit-status {{ 'ok' if event.status_code < 400 else 'failed' }}">{{ event.status_code }}</span></td></tr>{% else %}<tr><td colspan="5" class="empty">暂无审计记录。</td></tr>{% endfor %}
+    </tbody></table></div>
+  </article>
+</section>
+{% endblock %}

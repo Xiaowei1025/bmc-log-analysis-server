@@ -169,6 +169,7 @@ window.BmcChat = (() => {
         const body = new URLSearchParams({
           question,
           conversation_id: String(options.conversationId),
+          ...(options.groupId ? {group_id: String(options.groupId)} : {}),
           csrf_token: window.csrfToken || ''
         });
         const response = await fetch(options.endpoint, {
@@ -231,7 +232,9 @@ window.BmcChat = (() => {
       updateIdleButton();
     });
     input.addEventListener('keydown', event => {
-      if (event.key === 'Enter' && !event.shiftKey) {
+      // Enter keeps the composer multiline; Ctrl+Enter (Windows/Linux) and
+      // Command+Enter (macOS) submit the question.
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
         if (!controller) ask();
       }

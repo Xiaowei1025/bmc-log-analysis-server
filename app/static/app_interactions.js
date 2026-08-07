@@ -64,6 +64,23 @@
     closeConfirmation();
   });
 
+  const openDialog = dialog => {
+    if (dialog && !dialog.open) dialog.showModal();
+  };
+  document.querySelectorAll('[data-dialog-open]').forEach(trigger => {
+    const dialog = document.getElementById(trigger.dataset.dialogOpen);
+    trigger.addEventListener('click', () => openDialog(dialog));
+  });
+  document.querySelectorAll('[data-dialog-close]').forEach(trigger => {
+    trigger.addEventListener('click', () => trigger.closest('dialog')?.close());
+  });
+  document.querySelectorAll('dialog[data-default-open="true"]').forEach(openDialog);
+  document.querySelectorAll('dialog').forEach(dialog => {
+    dialog.addEventListener('click', event => {
+      if (event.target === dialog && dialog.id !== 'confirm-dialog') dialog.close();
+    });
+  });
+
   const postForms = document.querySelectorAll('form[method="post"]:not([data-no-pending])');
   postForms.forEach(form => {
     form.addEventListener('submit', event => {
@@ -214,8 +231,20 @@
         status.textContent = `${label} · 已自动保存`;
       }, 350);
     };
+    const saveNow = () => {
+      window.clearTimeout(timer);
+      localStorage.setItem(storageKey, JSON.stringify(serializeDraft(form)));
+      status.textContent = `${label} · 已保存草稿`;
+    };
     form.addEventListener('input', save);
     form.addEventListener('change', save);
+    form.querySelectorAll('[data-draft-save]').forEach(button => button.addEventListener('click', saveNow));
+    form.querySelectorAll('[data-draft-cancel]').forEach(control => control.addEventListener('click', event => {
+      event.preventDefault();
+      localStorage.removeItem(storageKey);
+      const target = control.dataset.draftCancel || control.getAttribute('href') || '/';
+      window.location.assign(target);
+    }));
     clear.addEventListener('click', () => {
       localStorage.removeItem(storageKey);
       status.textContent = `${label} · 草稿已清除，后续输入仍会自动保存`;

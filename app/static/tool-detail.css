@@ -177,7 +177,7 @@
   font-weight:800;
   box-shadow:0 8px 18px rgba(48,78,124,.11),inset 0 1px 0 rgba(255,255,255,.9);
 }
-.tool-description{min-height:68px;margin:0;color:var(--ink);font-size:15px;line-height:1.8}
+.tool-description{min-height:68px;margin:0;color:var(--ink);font-size:15px;line-height:1.5}.tool-description p{margin:0 0 10px}.tool-description img{display:block;max-width:100%;height:auto;margin:12px 0;border-radius:12px;box-shadow:0 10px 24px rgba(39,67,108,.14)}.tool-edit-actions{display:flex;justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap;margin-top:15px}
 .tool-version-list{display:grid;gap:13px}
 .tool-version-card{
   display:grid;
