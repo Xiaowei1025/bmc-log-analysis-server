@@ -47,6 +47,41 @@ class WeLinkModuleTests(unittest.TestCase):
         page = endpoint("/welink", "GET")(make_request(self.user_id))
         self.assertIn("服务器问题通报群", page.body.decode("utf-8"))
 
+    def test_group_management_is_dialog_only_and_edit_keeps_workspace(self):
+        endpoint("/welink/sources", "POST")(
+            make_request(self.user_id),
+            source_type="notice_group",
+            display_name="工作空间群",
+            conversation_key="workspace-group",
+            note="",
+            lookback_days=3,
+        )
+        page = endpoint("/welink", "GET")(make_request(self.user_id)).body.decode("utf-8")
+        self.assertNotIn('id="groups"', page)
+        self.assertIn('data-dialog-open="group-settings-dialog"', page)
+        self.assertIn(">巡检管理</button>", page)
+        self.assertIn('id="inspection-group-label"', page)
+        self.assertIn('id="inspection-mode-label"', page)
+        hero = page.split('<section class="page-hero">', 1)[1].split("</section>", 1)[0]
+        self.assertNotIn("当前分组", hero)
+        self.assertNotIn("分组设置", hero)
+        self.assertNotIn(">演示</button>", hero)
+        self.assertNotIn(">生产</button>", hero)
+        source = self.db.execute("SELECT * FROM welink_sources WHERE conversation_key=?", ("workspace-group",)).fetchone()
+        response = endpoint("/welink/sources/{source_id}/edit", "POST")(
+            make_request(self.user_id),
+            source_id=source["id"],
+            source_type="notice_group",
+            display_name="工作空间群-更新",
+            conversation_key="workspace-group-updated",
+            note="已更新",
+            lookback_days=5,
+        )
+        self.assertEqual(303, response.status_code)
+        self.assertIn(f"group_id={source['group_id']}", response.headers["location"])
+        self.assertIn("notice=source_updated", response.headers["location"])
+        self.assertIn("#sources", response.headers["location"])
+
     def test_mode_switch_and_bulk_source_actions_have_working_routes(self):
         mode_response = endpoint("/welink/mode", "POST")(make_request(self.user_id), run_mode="demo")
         self.assertEqual(303, mode_response.status_code)
@@ -122,6 +157,12 @@ class WeLinkModuleTests(unittest.TestCase):
     def test_bulk_route_is_registered_before_dynamic_source_route(self):
         routes = [route.path for route in main.app.routes if route.path.startswith("/welink/sources/") and "POST" in route.methods]
         self.assertLess(routes.index("/welink/sources/bulk/{action}"), routes.index("/welink/sources/{source_id}/{action}"))
+
+    def test_edit_routes_are_registered_before_dynamic_action_routes(self):
+        source_routes = [route.path for route in main.app.routes if route.path.startswith("/welink/sources/") and "POST" in route.methods]
+        recipient_routes = [route.path for route in main.app.routes if route.path.startswith("/welink/recipients/") and "POST" in route.methods]
+        self.assertLess(source_routes.index("/welink/sources/{source_id}/edit"), source_routes.index("/welink/sources/{source_id}/{action}"))
+        self.assertLess(recipient_routes.index("/welink/recipients/{recipient_id}/edit"), recipient_routes.index("/welink/recipients/{recipient_id}/{action}"))
 
     def test_demo_run_never_reads_or_sends_messages(self):
         with patch.dict("os.environ", {"WELINK_AGENT_BRIDGE_URL": "", "WELINK_AGENT_BRIDGE_TOKEN": ""}):
@@ -201,6 +242,10 @@ class WeLinkModuleTests(unittest.TestCase):
         self.assertIn("controller ? stop() : ask()", runtime)
         self.assertIn("Ctrl/⌘+Enter", welink_page)
         self.assertIn("Ctrl/⌘+Enter", ask_page)
+        self.assertIn("Enter 换行，Ctrl/⌘+Enter 发送", welink_page)
+        self.assertIn("Enter 换行，Ctrl/⌘+Enter 发送", ask_page)
+        self.assertIn("event.ctrlKey || event.metaKey", runtime)
+        self.assertNotIn("event.key === 'Enter' && !event.shiftKey", runtime)
         self.assertIn("AbortController", runtime)
         self.assertIn("sessionStorage", runtime)
         self.assertIn("回到最新", welink_page)
@@ -228,6 +273,40 @@ class WeLinkModuleTests(unittest.TestCase):
         second_id = int(response.headers["location"].split("=")[-1])
         self.assertNotEqual(first["id"], second_id)
         self.assertEqual(2, self.db.execute("SELECT COUNT(*) count FROM chat_conversations WHERE user_id=? AND scope='general'", (self.user_id,)).fetchone()["count"])
+
+    def test_welink_chat_history_and_rename_are_group_scoped(self):
+        endpoint("/welink", "GET")(make_request(self.user_id))
+        personal = self.db.execute(
+            "SELECT id,group_id FROM chat_conversations WHERE user_id=? AND scope='welink' ORDER BY id LIMIT 1",
+            (self.user_id,),
+        ).fetchone()
+        self.assertIsNotNone(personal["group_id"])
+        created = endpoint("/welink/groups", "POST")(
+            make_request(self.user_id), name="共享巡检组", description="多人可见"
+        )
+        self.assertEqual(303, created.status_code)
+        shared_group = self.db.execute(
+            "SELECT id FROM welink_groups WHERE owner_id=? AND name=?", (self.user_id, "共享巡检组")
+        ).fetchone()["id"]
+        shared = endpoint("/welink/chat/conversations", "POST")(
+            make_request(self.user_id), group_id=shared_group
+        )
+        shared_id = int(shared.headers["location"].split("chat=")[-1].split("#")[0])
+        self.assertNotEqual(personal["group_id"], self.db.execute("SELECT group_id FROM chat_conversations WHERE id=?", (shared_id,)).fetchone()["group_id"])
+        with self.assertRaises(HTTPException) as blocked:
+            endpoint("/welink/chat/conversations/{conversation_id}/rename", "POST")(
+                make_request(self.user_id), conversation_id=shared_id, title="越组修改", group_id=personal["group_id"]
+            )
+        self.assertEqual(404, blocked.exception.status_code)
+        renamed = endpoint("/welink/chat/conversations/{conversation_id}/rename", "POST")(
+            make_request(self.user_id), conversation_id=shared_id, title="共享问题跟踪", group_id=shared_group
+        )
+        self.assertEqual(303, renamed.status_code)
+        self.assertIn(f"group_id={shared_group}", renamed.headers["location"])
+        self.assertEqual(
+            "共享问题跟踪",
+            self.db.execute("SELECT title FROM chat_conversations WHERE id=?", (shared_id,)).fetchone()["title"],
+        )
 
     def test_conversation_rename_is_shared_scoped_and_preserved(self):
         endpoint("/ask", "GET")(make_request(self.user_id))

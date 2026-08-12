@@ -1,0 +1,43 @@
+<section class="span-2 case-editor-block tool-description-editor" aria-labelledby="tool-description-label">
+  <div class="case-editor-head">
+    <div>
+      <strong id="tool-description-label">详细说明与使用方法</strong>
+      <small id="tool-description-hint">这是工具最重要的使用入口。富文本支持粘贴图片，选中图片后可拖动右下角调整宽度；内容会统一保存为 Markdown。</small>
+    </div>
+    <div class="case-editor-actions">
+      <div class="editor-mode-switch" role="group" aria-label="工具说明输入方式">
+        <button type="button" class="is-active" data-tool-editor-mode="rich" aria-pressed="true">富文本</button>
+        <button type="button" data-tool-editor-mode="markdown" aria-pressed="false">Markdown</button>
+      </div>
+      <button type="button" id="tool-preview-button" class="editor-action">实时预览</button>
+    </div>
+  </div>
+  <div id="tool-rich-toolbar" class="rich-toolbar" aria-label="工具说明格式工具栏">
+    <button type="button" data-tool-editor-command="heading" title="二级标题">标题</button>
+    <button type="button" data-tool-editor-command="bold" title="加粗（Markdown：Ctrl+B）">粗体</button>
+    <button type="button" data-tool-editor-command="italic" title="强调">斜体</button>
+    <button type="button" data-tool-editor-command="unordered" title="无序列表">列表</button>
+    <button type="button" data-tool-editor-command="ordered" title="有序列表">编号</button>
+    <button type="button" data-tool-editor-command="quote" title="引用">引用</button>
+    <button type="button" data-tool-editor-command="code" title="代码块">代码</button>
+    <button type="button" data-tool-editor-command="link" title="插入链接">链接</button>
+    <button type="button" data-tool-editor-command="table" title="插入三列表格">表格</button>
+    <button type="button" data-tool-editor-command="hr" title="插入分隔线">分隔线</button>
+    <button type="button" data-tool-editor-command="image" title="插入图片">图片</button>
+    <label class="editor-image-size" data-tool-rich-only title="选中图片后调整宽度（预设只会缩小，不会放大）">图片尺寸<select data-tool-image-size aria-label="图片尺寸"><option value="">选择</option><option value="25%">25%</option><option value="50%">50%</option><option value="75%">75%</option><option value="100%">原始</option></select></label>
+    <button type="button" data-tool-editor-command="clear" data-tool-rich-only title="清除所选文本的格式">清除格式</button>
+  </div>
+  <input id="tool-image-input" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+  <small class="tool-image-hint">支持粘贴或选择 PNG、JPG、GIF、WebP 图片；单张不超过 2 MB。选中图片后可拖动右下角调整宽度，也可用尺寸菜单；“原始”恢复图片本身尺寸。</small>
+  <textarea id="tool-description-input" name="details" class="case-markdown-input" aria-required="true" placeholder="# 工具概览&#10;&#10;## 适用场景&#10;&#10;## 使用步骤&#10;&#10;## 参数与示例&#10;&#10;## 注意事项">{{ tool.details if tool else '' }}</textarea>
+  <div id="tool-rich-editor" class="case-rich-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="工具说明富文本编辑器" data-placeholder="请说明运行环境、安装方式、参数、示例、权限和注意事项。" hidden></div>
+  <article id="tool-preview" class="case-preview panel" hidden><div class="case-preview-head"><strong>发布前预览</strong><small>按当前输入方式安全渲染</small></div><div id="tool-preview-content" class="markdown-output"></div></article>
+  <p id="tool-description-error" class="notice error" role="alert" hidden>请填写工具的详细说明与使用方法。</p>
+</section>
+
+<section class="span-2 tool-markdown-tips" aria-label="工具说明写作提示">
+  <div><strong>推荐说明结构</strong><span>工具概览 → 运行环境 → 安装步骤 → 参数说明 → 使用示例 → 故障排查 → 注意事项</span></div>
+  <details><summary>Markdown 常用语法</summary><div class="syntax-grid"><code># 一级标题<br>## 二级标题</code><code>**关键结论** · *强调* · `命令参数`</code><code>1. 执行第一步<br>- 检查项</code><code>```bash<br>python tool.py --help<br>```</code><code>| 参数 | 必填 | 说明 |<br>| --- | --- | --- |</code><code>&gt; 注意：发布前请脱敏日志中的账号、IP、Token。</code></div></details>
+</section>
+
+<script src="/static/tool-editor.js?v=0.1.3"></script>

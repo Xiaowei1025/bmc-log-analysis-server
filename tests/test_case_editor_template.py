@@ -16,10 +16,16 @@ class CaseEditorTemplateTests(unittest.TestCase):
         self.assertIn('id="case-markdown-input"', source)
         self.assertIn('id="markdown-syntax-dialog"', source)
         self.assertIn('id="case-preview-button"', source)
+        self.assertIn('data-draft-save', source)
+        self.assertIn('data-draft-cancel', source)
+        self.assertIn('保存草稿', source)
+        self.assertIn('取消发布', source)
         self.assertIn('richToMarkdown', source)
         self.assertIn('String.fromCharCode(10)', source)
         self.assertIn('name="import_id"', source)
         self.assertIn('data-editor-command="bold"', source)
+        for marker in ('data-editor-command="image"', 'data-editor-command="table"', 'data-editor-command="link"', 'data-editor-command="hr"', 'case-image-input', 'data-editor-image-size', 'BmcEditorMedia', 'handlePaste', 'insertRichTable'):
+            self.assertIn(marker, source)
         self.assertIn("event.metaKey || event.ctrlKey", source)
         self.assertIn("applyMarkdownCommand('bold')", source)
         self.assertIn('restoreRichSelection', source)
@@ -48,8 +54,9 @@ class CaseEditorTemplateTests(unittest.TestCase):
             help_text="测试帮助",
         )
 
-        self.assertIn('/static/case-editor.css?v=0.8.3', rendered)
-        self.assertIn('/static/case-live-preview.css?v=0.8.2', rendered)
+        self.assertIn('/static/case-editor.css?v=0.8.6', rendered)
+        self.assertIn('/static/editor-media.js?v=0.2.0', rendered)
+        self.assertIn('/static/case-live-preview.css?v=0.8.3', rendered)
         self.assertIn('/static/case-import.css', rendered)
         self.assertIn('Markdown 专业使用指南', rendered)
         self.assertIn('富文本', rendered)
@@ -63,7 +70,8 @@ class CaseEditorTemplateTests(unittest.TestCase):
         self.assertIn(".case-preview", css)
         self.assertIn("position:sticky", css)
         self.assertIn("@media(max-width:860px)", css)
-        self.assertIn("grid-template-columns:minmax(0,1fr)", css)
+        self.assertIn("grid-template-columns:minmax(0,1.08fr) minmax(230px,.92fr)", css)
+        self.assertNotIn("grid-template-columns:minmax(0,1fr);", css)
 
     def test_markdown_guide_shows_source_and_rendered_examples_responsively(self):
         root = Path(__file__).resolve().parents[1]
@@ -79,6 +87,13 @@ class CaseEditorTemplateTests(unittest.TestCase):
         self.assertIn(".syntax-compare", css)
         self.assertIn("grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr)", css)
         self.assertIn("@media(max-width:760px)", css)
+
+    def test_rich_editor_tables_keep_visible_borders(self):
+        css = (Path(__file__).resolve().parents[1] / "app/static/case-editor.css").read_text(encoding="utf-8")
+        self.assertIn(".case-rich-editor th,.case-rich-editor td", css)
+        self.assertIn("border:1px solid rgba(58,88,130,.38)", css)
+        self.assertIn(".case-rich-editor tbody tr:nth-child(even)", css)
+        self.assertIn(".editor-image-resize-handle", css)
 
 
 if __name__ == "__main__":

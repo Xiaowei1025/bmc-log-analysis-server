@@ -13,7 +13,9 @@ openEuler 24.03 x86_64 服务器上的 Nginx
         ▼
 Python 3.11 / FastAPI
         ├── SQLite、上传文件、模型 Key（只在服务器）
-        └── WeLink 内网桥接 / welink-cli（只在服务器侧）
+        └── WeLink 任务 API（服务器不保存个人 CLI 登录态）
+Windows 用户电脑上的本地连接器
+        └── 用户自己的 WeLink CLI 和登录态
 ```
 
 Windows 用户不能访问文档中的 `127.0.0.1:8000`；该地址在 Windows 上只代表用户自己的电脑。最终入口必须是公司 DNS 域名，例如 `https://bmc-hub.internal.example`。
@@ -55,11 +57,12 @@ APP_SECRET=使用受控密码库生成的至少 32 位随机值
 SESSION_HTTPS_ONLY=true
 ALLOW_SELF_REGISTRATION=false
 WELINK_DEFAULT_MODE=demo
+WELINK_CONNECTOR_ENABLED=0
 ```
 
-先保持 `WELINK_DEFAULT_MODE=demo`。只有部署完内网桥接服务、完成令牌配置和验收后，才由管理员在页面切换为生产模式。
+先保持 `WELINK_DEFAULT_MODE=demo`。如果采用每人自己的 Windows 连接器，先设置 `WELINK_CONNECTOR_ENABLED=1`，配对测试设备后再由管理员切换为生产模式；服务器不会登录或保存任何个人 WeLink 账号。
 
-## 3. WeLink 桥接契约
+## 3. WeLink 桥接/本地连接器契约
 
 生产模式仅向 `WELINK_AGENT_BRIDGE_URL/v1/welink/runs` 发起 `POST`，携带 `Authorization: Bearer <WELINK_AGENT_BRIDGE_TOKEN>`。请求包含启用消息源和接收方的标识、类型、回看天数及备注；桥接端返回：
 
@@ -67,7 +70,16 @@ WELINK_DEFAULT_MODE=demo
 {"status":"queued","summary":"任务已接受"}
 ```
 
-桥接端必须在公司内网受控主机运行、维护 `welink-cli` 登录态、校验服务令牌、使用命令白名单、记录审计日志。网页服务不得执行 shell 或接收任意 CLI 参数。
+如果公司已有受控桥接服务，可继续使用上述合约；否则启用 `docs/WELINK_CONNECTOR_MVP.md` 的 Windows 本地连接器：用户在网页生成一次性令牌，连接器通过心跳、租约和结果接口主动领取任务。`connector/windows_connector.py` 默认 dry-run/fail-closed，拿到公司 CLI 版本、命令白名单和 JSON 样例后再由内部 Agent 完成适配和签名打包。网页服务不得执行 shell 或接收任意 CLI 参数。
+
+启用调度器：
+
+```bash
+sudo install -m 0644 deploy/bmc-welink-scheduler.service deploy/bmc-welink-scheduler.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now bmc-welink-scheduler.timer
+systemctl list-timers bmc-welink-scheduler.timer
+```
 
 ## 4. AI 模型档案
 

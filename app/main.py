@@ -24,6 +24,7 @@ from .log_parser import find_evidence, read_log_bundle
 from .security import hash_password, verify_password
 from .welink_module import register_welink_routes
 from .runtime_settings import get_setting, set_setting
+from .oidc_auth import DEFAULT_SUPER_ADMIN_EMPLOYEE_IDS, OAuth2Client, OAuth2Error, OAuth2Settings, auth_provider_mode, local_auth_enabled, normalize_identity
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -66,7 +67,7 @@ def is_production() -> bool:
 
 
 def self_registration_enabled() -> bool:
-    return env_flag("ALLOW_SELF_REGISTRATION", False)
+    return local_auth_enabled() and env_flag("ALLOW_SELF_REGISTRATION", False)
 
 
 def session_https_only() -> bool:
@@ -89,17 +90,18 @@ HELP = {
     "knowledge_case_import.html": ("导入案例帮助", "导入资料会先生成待发布草稿，原文件将被保留用于追溯。请校对自动提取的标题、摘要和正文，再补充日志或编辑细节后发布。DOCX、PPTX、Markdown 和文本可直接导入；旧版 DOC/PPT 需要服务器安装 LibreOffice。"),
     "knowledge_case_form.html": ("发布案例帮助", "正文默认使用富文本，可随时切换为 Markdown；两种模式都可使用上方格式工具栏。Markdown 中选中文本后可点“粗体”，或按 ⌘/Ctrl+B 插入/取消加粗；Markdown 模式还提供语法说明和实时预览。也可先导入已有文档生成草稿。两种方式均会安全沉淀为 Markdown，便于检索、问答与长期留存。可选上传一份或多份关联日志，每份日志会生成独立报告并与该案例关联。"),
     "knowledge_case_detail.html": ("案例详情帮助", "可阅读案例正文、查看关联日志报告、原始导入资料及被引用的特征。案例内容会作为内部知识补充给智能问答。"),
-    "requests.html": ("需求板帮助", "所有登录用户都可查看和提交需求。团队按设定节奏集中评审，状态与评审意见会在需求详情中保留。"),
-    "request_form.html": ("提交需求帮助", "请说明希望解决的痛点、使用场景和预期价值。未提交内容会在当前浏览器自动保存；正式提交后进入待评审队列。"),
-    "request_detail.html": ("需求详情帮助", "查看需求完整描述、当前状态与评审时间线。仅配置的评审人可以改变状态或添加评审意见。"),
+    "requests.html": ("需求板帮助", "所有登录用户都可查看和提交需求。团队按设定节奏集中评审，提交人可以在详情页修改自己的需求；每次修改都会生成新版本并重新进入待评审。"),
+    "request_form.html": ("提交需求帮助", "请说明希望解决的痛点、使用场景和预期价值。提交人可以修改自己的需求；修改后会保留原提交内容与评审意见，并重新进入待评审队列。"),
+    "request_detail.html": ("需求详情帮助", "查看需求当前版本、历史提交内容与评审时间线。只有提交人可以修改内容，只有配置的评审人可以改变状态或添加评审意见。"),
     "ask.html": ("智能问答帮助", "问题会先从本地特征库检索相关知识，再由已配置的 LLM 流式生成建议。不要在问题中粘贴密码、密钥或未脱敏的敏感日志。"),
     "tools.html": ("工具中心帮助", "此模块保留原有的内部工具分发功能。工具作者可持续发布版本，历史版本和下载计数都会保留。"),
     "tool_form.html": ("发布工具帮助", "填写工具说明、版本和附件。请只上传已通过公司安全审核的内部工具。"),
-    "tool_detail.html": ("工具详情帮助", "可下载各版本、查看历史、提交使用建议；仅工具作者可修改介绍或发布新版本。"),
+    "tool_detail.html": ("工具详情帮助", "可下载各版本、查看历史、提交使用建议；仅工具作者可修改介绍或发布新版本，管理员可在确认后删除整项工具及其附件。"),
     "tool_edit.html": ("修改工具帮助", "此页仅更新工具介绍或 Logo，不会删除历史版本或下载记录。"),
     "welink.html": ("重大问题巡检帮助", "在此配置需要关注的 WeLink 群、个人消息和报告接收方。网页不直接执行 CLI；只有受控内网桥接服务才能读取或发送 WeLink 消息。"),
     "model_settings.html": ("模型配置帮助", "管理员可在已由服务器环境配置好的模型档案之间切换。页面不会显示、保存或修改任何 API Key。"),
-    "auth.html": ("账号帮助", "请使用内部团队约定的用户名注册。生产部署前建议接入公司统一身份认证。"),
+    "admin.html": ("应用管理帮助", "只有管理员能打开这里。可以调整贡献者、审核者和管理员权限，并查看登录、退出和关键写操作审计；密码、Token、AK/SK 与日志正文不会进入审计记录。"),
+    "auth.html": ("账号帮助", "可使用本地账号或公司统一身份认证登录。生产部署使用华为 IDaaS 的 OAuth 2.0 授权码 + PKCE；服务器通过 UserInfo 接口获取工号和显示信息，不使用 OIDC ID Token。"),
 }
 
 app = FastAPI(title="BMC 智能日志平台")
@@ -124,15 +126,93 @@ def current_user(request: Request):
     if not user_id:
         return None
     db = connection()
-    user = db.execute("SELECT id, username, role FROM users WHERE id = ?", (user_id,)).fetchone()
+    user = db.execute("SELECT id, username, role, auth_provider, email, display_name FROM users WHERE id = ?", (user_id,)).fetchone()
     db.close()
     return user
+
+
+def configured_super_admin_employee_ids() -> set[str]:
+    """Return the server-side highest-admin allowlist.
+
+    The company currently designates j00983211 and j00456121. An internal
+    deployment may replace the allowlist with OAUTH_SUPER_ADMIN_EMPLOYEE_IDS
+    without exposing a setting in the browser.
+    """
+    value = os.getenv("OAUTH_SUPER_ADMIN_EMPLOYEE_IDS", "").strip()
+    if not value:
+        value = os.getenv("OIDC_SUPER_ADMIN_EMPLOYEE_IDS", "").strip() or DEFAULT_SUPER_ADMIN_EMPLOYEE_IDS
+    return {item.strip().casefold() for item in value.split(",") if item.strip()}
+
+
+def is_super_admin_user(user) -> bool:
+    if not user:
+        return False
+    candidates = {str(user["username"] or "").strip().casefold()}
+    if "external_subject" in user.keys():
+        candidates.add(str(user["external_subject"] or "").rsplit("|", 1)[-1].casefold())
+    return bool(candidates & configured_super_admin_employee_ids())
+
+
+def record_audit(
+    *,
+    user_id: int | None,
+    action: str,
+    resource: str = "",
+    status_code: int = 200,
+    detail: str = "",
+    request: Request | None = None,
+    actor_username: str = "",
+):
+    """Append a privacy-conscious application audit event.
+
+    Query strings, form bodies, tokens and uploaded content are deliberately
+    excluded. Audit failures never break the business request.
+    """
+    try:
+        db = connection()
+        if user_id and not actor_username:
+            row = db.execute("SELECT username FROM users WHERE id=?", (user_id,)).fetchone()
+            actor_username = row["username"] if row else ""
+        ip_address = request.client.host if request and request.client else ""
+        user_agent = (request.headers.get("user-agent", "") if request else "")[:300]
+        db.execute(
+            """INSERT INTO audit_events
+            (user_id,actor_username,action,resource,status_code,detail,ip_address,user_agent)
+            VALUES (?,?,?,?,?,?,?,?)""",
+            (user_id, actor_username[:120], action[:120], resource[:240], int(status_code), detail[:500], ip_address[:80], user_agent),
+        )
+        db.commit()
+        db.close()
+    except Exception:
+        # Auditing is best effort; never turn a successful operation into a
+        # 500 merely because a local audit row could not be written.
+        return
+
+
+def audit_action_for(path: str, method: str) -> str:
+    if path in {"/login", "/auth/login", "/auth/oauth2/login"}:
+        return "登录认证"
+    if path in {"/authorize", "/auth/oauth2/callback", "/auth/oidc/callback"}:
+        return "完成华为工号登录"
+    if path in {"/logout", "/auth/logout"}:
+        return "退出登录"
+    if path == "/admin":
+        return "查看应用管理"
+    if path.startswith("/admin/users/"):
+        return "修改人员权限"
+    return f"{method} 操作"
 
 
 def page(request: Request, name: str, **context):
     context["user"] = current_user(request)
     context["csrf_token"] = ensure_csrf_token(request)
     context["registration_enabled"] = self_registration_enabled()
+    context["local_auth_enabled"] = local_auth_enabled()
+    context["oauth2_enabled"] = auth_provider_mode() in {"oauth2", "oidc", "hybrid"}
+    context["oauth2_provider_name"] = os.getenv("OAUTH_PROVIDER_NAME", os.getenv("OIDC_PROVIDER_NAME", "华为 UniPortal")).strip() or "华为 UniPortal"
+    # Keep one template release compatible with customized internal skins.
+    context["oidc_enabled"] = context["oauth2_enabled"]
+    context["oidc_provider_name"] = context["oauth2_provider_name"]
     context["role_label"] = role_label
     context.setdefault("help_title", HELP.get(name, ("页面帮助", "请根据页面上的提示完成操作。"))[0])
     context.setdefault("help_text", HELP.get(name, ("页面帮助", "请根据页面上的提示完成操作。"))[1])
@@ -287,6 +367,43 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def audit_middleware(request: Request, call_next):
+    path = request.url.path
+    method = request.method.upper()
+    should_audit = (
+        (method in {"POST", "PUT", "PATCH", "DELETE"} or path.startswith("/auth/") or path.startswith("/admin"))
+        and path not in {"/logout", "/auth/logout"}
+    )
+    # This middleware is outermost; SessionMiddleware adds ``scope['session']``
+    # only after ``call_next`` enters the inner stack.
+    session_data = request.scope.get("session", {})
+    before_user_id = session_data.get("user_id") if should_audit else None
+    try:
+        response = await call_next(request)
+    except Exception:
+        if should_audit:
+            record_audit(
+                user_id=request.scope.get("session", {}).get("user_id") or before_user_id,
+                action=audit_action_for(path, method),
+                resource=path,
+                status_code=500,
+                detail="请求异常",
+                request=request,
+            )
+        raise
+    if should_audit:
+        record_audit(
+            user_id=request.scope.get("session", {}).get("user_id") or before_user_id,
+            action=audit_action_for(path, method),
+            resource=path,
+            status_code=response.status_code,
+            detail="成功" if response.status_code < 400 else "请求未成功",
+            request=request,
+        )
+    return response
+
+
 def redirect(path: str):
     return RedirectResponse(path, status_code=303)
 
@@ -308,6 +425,18 @@ def save_upload(upload: UploadFile, folder: str) -> tuple[Path, str]:
     return target, safe_name
 
 
+def remove_uploaded_file(path_value: str | None):
+    """Remove a tool attachment only when it is inside the configured upload root."""
+    if not path_value:
+        return
+    target = Path(path_value)
+    try:
+        target.resolve().relative_to(UPLOAD_DIR.resolve())
+    except ValueError:
+        return
+    target.unlink(missing_ok=True)
+
+
 def severity_label(value: str) -> str:
     return {"critical": "严重", "high": "高", "medium": "中", "low": "低"}.get(value, "中")
 
@@ -327,6 +456,27 @@ def requirement_review_cadence() -> str:
 def can_review_requirements(user) -> bool:
     reviewers = {name.strip() for name in os.getenv("REQUEST_REVIEWERS", "demo-maintainer").split(",") if name.strip()}
     return bool(user and (has_role(user, "reviewer", "admin") or user["username"] in reviewers))
+
+
+def can_edit_requirement(user, requirement) -> bool:
+    """Only the submitter may revise a requirement; review permissions stay separate."""
+    return bool(user and requirement and requirement["created_by"] == user["id"])
+
+
+def create_requirement_revision(db, requirement, changed_by: int, title: str, category: str, description: str, expected_value: str, change_note: str):
+    next_number = db.execute(
+        "SELECT COALESCE(MAX(revision_number),0)+1 AS next_number FROM requirement_revisions WHERE requirement_id=?",
+        (requirement["id"],),
+    ).fetchone()["next_number"]
+    return db.execute(
+        """INSERT INTO requirement_revisions
+        (requirement_id,revision_number,title,category,description,expected_value,status_at_submission,changed_by,change_note)
+        VALUES (?,?,?,?,?,?,?,?,?)""",
+        (
+            requirement["id"], next_number, title, category, description, expected_value,
+            requirement["status"], changed_by, change_note,
+        ),
+    ).lastrowid
 
 
 def evaluate_feature_conditions(files: dict[str, str], conditions, match_mode: str):
@@ -445,6 +595,7 @@ def register(request: Request, username: str = Form(), password: str = Form()):
         db.commit()
         request.session.clear()
         request.session["user_id"] = cursor.lastrowid
+        request.session["auth_provider"] = "local"
         request.session["csrf_token"] = secrets.token_urlsafe(32)
         return redirect("/")
     except Exception:
@@ -455,23 +606,208 @@ def register(request: Request, username: str = Form(), password: str = Form()):
 
 @app.get("/login")
 def login_form(request: Request):
-    return page(request, "auth.html", mode="login")
+    error = None
+    if request.query_params.get("oauth_error") or request.query_params.get("oidc_error"):
+        error = "华为 UniPortal 登录未完成。请检查账号权限，或联系管理员核对 OAuth2 授权、Token、UserInfo 端点、回调地址和内网连通性。"
+    notice = "已退出登录。" if request.query_params.get("notice") == "logged_out" else None
+    return page(request, "auth.html", mode="login", error=error, notice=notice)
+
+
+def _safe_next_path(value: str | None) -> str:
+    """Only keep a local path so an IdP cannot turn login into an open redirect."""
+    if not value:
+        return "/"
+    parsed = urllib.parse.urlsplit(value)
+    if parsed.scheme or parsed.netloc or not value.startswith("/") or value.startswith("//"):
+        return "/"
+    return value
+
+
+def _oidc_role(identity: dict, settings: OAuth2Settings) -> str:
+    if _is_configured_super_admin_identity(identity, settings):
+        return "admin"
+    groups = {item.casefold() for item in identity.get("groups", ())}
+    if groups.intersection({item.casefold() for item in settings.admin_groups}):
+        return "admin"
+    if groups.intersection({item.casefold() for item in settings.reviewer_groups}):
+        return "reviewer"
+    return "contributor"
+
+
+def _is_configured_super_admin_identity(identity: dict, settings: OAuth2Settings) -> bool:
+    configured_super_admins = {item.casefold() for item in settings.super_admin_employee_ids}
+    claims = identity.get("claims") or {}
+    employee_candidates = {
+        str(identity.get("username") or "").strip(),
+        *(str(claims.get(name) or "").strip() for name in ("employee_id", "employeeId", "employee_no", "employeeNo", "preferred_username", "uid")),
+    }
+    return bool(configured_super_admins.intersection({item.casefold() for item in employee_candidates if item}))
+
+
+def _oidc_username(value: str) -> str:
+    value = re.sub(r"[^\w.@+-]+", "_", value.strip(), flags=re.UNICODE).strip("._-")
+    return (value or "idaas-user")[:80]
+
+
+def provision_oidc_user(db, identity: dict, settings: OAuth2Settings):
+    """Find or provision a local permission record for an external identity.
+
+    Only the immutable external key from OAuth2 UserInfo links an account. A
+    local username is never auto-linked unless OAUTH_AUTO_LINK_LOCAL=true is set by
+    an operator during a controlled migration.
+    """
+    provider = settings.provider_id
+    external_subject = identity["external_key"]
+    user = db.execute(
+        "SELECT * FROM users WHERE auth_provider=? AND external_subject=?",
+        (provider, external_subject),
+    ).fetchone()
+    desired_role = _oidc_role(identity, settings)
+    candidate = _oidc_username(identity.get("username") or identity["subject"])
+    # The explicitly configured highest administrator may already have a
+    # bootstrap local row. Reuse that exact row when the OAuth identity
+    # returns the same employee ID; ordinary users still require the explicit
+    # OAUTH_AUTO_LINK_LOCAL opt-in and are never linked by name.
+    allow_super_admin_link = candidate.casefold() in {item.casefold() for item in settings.super_admin_employee_ids}
+    if user is None and (settings.auto_link_local or allow_super_admin_link):
+        user = db.execute("SELECT * FROM users WHERE username=? AND auth_provider='local'", (candidate,)).fetchone()
+        if user:
+            db.execute(
+                "UPDATE users SET auth_provider=?,external_subject=?,email=?,display_name=?,last_login_at=CURRENT_TIMESTAMP WHERE id=?",
+                (provider, external_subject, identity.get("email", ""), identity.get("display_name", ""), user["id"]),
+            )
+    if user is None:
+        if not settings.auto_provision:
+            raise OAuth2Error("该 IDaaS 账号尚未被平台授权，需管理员先创建或允许自动开通。")
+        original = candidate
+        suffix = 1
+        while db.execute("SELECT 1 FROM users WHERE username=?", (candidate,)).fetchone():
+            suffix += 1
+            candidate = f"{original[:70]}-{suffix}"
+        cursor = db.execute(
+            """INSERT INTO users
+            (username,password_hash,role,auth_provider,external_subject,email,display_name,last_login_at)
+            VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP)""",
+            (
+                candidate,
+                hash_password(secrets.token_urlsafe(32)),
+                desired_role,
+                provider,
+                external_subject,
+                identity.get("email", ""),
+                identity.get("display_name", ""),
+            ),
+        )
+        return cursor.lastrowid
+    # The server-side highest-admin allowlist is authoritative even when
+    # ordinary group role synchronization is disabled. This also upgrades an
+    # existing OAuth user the next time the newly designated employee logs in.
+    role = "admin" if _is_configured_super_admin_identity(identity, settings) else (desired_role if settings.sync_roles else user["role"])
+    db.execute(
+        "UPDATE users SET email=?,display_name=?,last_login_at=CURRENT_TIMESTAMP,role=? WHERE id=?",
+        (identity.get("email", ""), identity.get("display_name", ""), role, user["id"]),
+    )
+    return user["id"]
+
+
+def _start_oauth2_session(request: Request, next_path: str) -> RedirectResponse:
+    settings = OAuth2Settings.from_env()
+    verifier, challenge = OAuth2Client.new_pkce()
+    state = secrets.token_urlsafe(32)
+    request.session["oauth2_state"] = state
+    request.session["oauth2_code_verifier"] = verifier
+    request.session["oauth2_next"] = _safe_next_path(next_path)
+    url = OAuth2Client(settings).authorization_url(
+        state=state,
+        code_challenge=challenge,
+        redirect_uri=settings.redirect_uri,
+    )
+    return RedirectResponse(url, status_code=302)
+
+
+@app.get("/auth/login")
+@app.get("/auth/oauth2/login")
+def oauth2_login(request: Request, next: str | None = None):
+    if auth_provider_mode() == "local":
+        return redirect("/login")
+    try:
+        return _start_oauth2_session(request, next or "/")
+    except OAuth2Error:
+        return redirect("/login?oauth_error=1")
+
+
+@app.get("/authorize")
+@app.get("/auth/oauth2/callback")  # one-release callback compatibility
+@app.get("/auth/oidc/callback")  # one-release route compatibility; still OAuth2-only
+def oauth2_callback(request: Request):
+    if auth_provider_mode() == "local":
+        return redirect("/login")
+    query = request.query_params
+    saved_state = request.session.pop("oauth2_state", None)
+    verifier = request.session.pop("oauth2_code_verifier", None)
+    next_path = _safe_next_path(request.session.pop("oauth2_next", "/"))
+    # Consume old session keys once so a user who started a login before the
+    # upgrade receives a controlled error rather than an invalid flow.
+    saved_state = saved_state or request.session.pop("oidc_state", None)
+    verifier = verifier or request.session.pop("oidc_code_verifier", None)
+    next_path = next_path if next_path != "/" else _safe_next_path(request.session.pop("oidc_next", "/"))
+    if query.get("error") or not saved_state or not verifier or query.get("state") != saved_state:
+        request.session.clear()
+        return redirect("/login?oauth_error=1")
+    try:
+        settings = OAuth2Settings.from_env()
+        identity = OAuth2Client(settings).identity_from_code(query.get("code", ""), verifier, redirect_uri=settings.redirect_uri)
+        db = connection()
+        try:
+            user_id = provision_oidc_user(db, identity, settings)
+            db.commit()
+        finally:
+            db.close()
+    except (OAuth2Error, KeyError, ValueError):
+        request.session.clear()
+        return redirect("/login?oauth_error=1")
+    request.session.clear()
+    request.session["user_id"] = user_id
+    request.session["auth_provider"] = settings.provider_id
+    request.session["csrf_token"] = secrets.token_urlsafe(32)
+    return redirect(next_path)
+
+
+@app.get("/auth/logout")
+def oauth2_logout(request: Request):
+    user = current_user(request)
+    if user:
+        record_audit(user_id=user["id"], action="退出登录", resource="/auth/logout", request=request)
+    request.session.clear()
+    end_session = os.getenv("OAUTH_END_SESSION_URL", os.getenv("OIDC_END_SESSION_URL", "")).strip()
+    if end_session:
+        query = {"post_logout_redirect_uri": os.getenv("APP_BASE_URL", "http://127.0.0.1:8000").rstrip("/") + "/login?notice=logged_out"}
+        client_id = os.getenv("OAUTH_CLIENT_ID", os.getenv("OIDC_CLIENT_ID", "")).strip()
+        if client_id:
+            query["client_id"] = client_id
+        separator = "&" if "?" in end_session else "?"
+        return RedirectResponse(end_session + separator + urllib.parse.urlencode(query), status_code=302)
+    return redirect("/login?notice=logged_out")
 
 
 @app.post("/login")
 def login(request: Request, username: str = Form(), password: str = Form()):
+    if not local_auth_enabled():
+        return redirect("/auth/login")
     db = connection(); user = db.execute("SELECT * FROM users WHERE username=?", (username.strip(),)).fetchone(); db.close()
     if not user or not verify_password(password, user["password_hash"]):
         return page(request, "auth.html", mode="login", error="用户名或密码不正确。")
     request.session.clear()
     request.session["user_id"] = user["id"]
+    request.session["auth_provider"] = user["auth_provider"] if "auth_provider" in user.keys() else "local"
     request.session["csrf_token"] = secrets.token_urlsafe(32)
     return redirect("/")
 
 
 @app.post("/logout")
 def logout(request: Request):
-    require_user(request)
+    user = require_user(request)
+    record_audit(user_id=user["id"], action="退出登录", resource="/logout", request=request)
     request.session.clear()
     return redirect("/")
 
@@ -826,6 +1162,11 @@ def create_requirement_request(request: Request, title: str = Form(), category: 
         "INSERT INTO requirement_requests (title,category,description,expected_value,created_by) VALUES (?,?,?,?,?)",
         (title.strip(), category if category in allowed_categories else "other", description.strip(), expected_value.strip(), user["id"]),
     ).lastrowid
+    requirement = db.execute("SELECT * FROM requirement_requests WHERE id=?", (requirement_id,)).fetchone()
+    create_requirement_revision(
+        db, requirement, user["id"], requirement["title"], requirement["category"],
+        requirement["description"], requirement["expected_value"], "初始提交",
+    )
     db.commit(); db.close()
     return redirect(f"/requests/{requirement_id}")
 
@@ -834,11 +1175,75 @@ def create_requirement_request(request: Request, title: str = Form(), category: 
 def requirement_request_detail(request: Request, requirement_id: int):
     user = require_user(request); db = connection()
     requirement = db.execute("SELECT r.*,u.username FROM requirement_requests r JOIN users u ON u.id=r.created_by WHERE r.id=?", (requirement_id,)).fetchone()
-    events = db.execute("SELECT e.*,u.username FROM requirement_review_events e JOIN users u ON u.id=e.reviewed_by WHERE e.requirement_id=? ORDER BY e.reviewed_at DESC", (requirement_id,)).fetchall()
+    revisions = db.execute(
+        """SELECT r.*,u.username FROM requirement_revisions r JOIN users u ON u.id=r.changed_by
+        WHERE r.requirement_id=? ORDER BY r.revision_number DESC""",
+        (requirement_id,),
+    ).fetchall()
+    events = db.execute(
+        """SELECT e.*,u.username,rv.revision_number FROM requirement_review_events e
+        JOIN users u ON u.id=e.reviewed_by LEFT JOIN requirement_revisions rv ON rv.id=e.revision_id
+        WHERE e.requirement_id=? ORDER BY e.reviewed_at DESC""",
+        (requirement_id,),
+    ).fetchall()
     db.close()
     if not requirement:
         raise HTTPException(404)
-    return page(request, "request_detail.html", requirement=requirement, events=events, requirement_status_label=requirement_status_label, requirement_category_label=requirement_category_label, cadence=requirement_review_cadence(), can_review=can_review_requirements(user))
+    return page(request, "request_detail.html", requirement=requirement, revisions=revisions, events=events, requirement_status_label=requirement_status_label, requirement_category_label=requirement_category_label, cadence=requirement_review_cadence(), can_review=can_review_requirements(user), can_edit=can_edit_requirement(user, requirement))
+
+
+@app.get("/requests/{requirement_id}/edit")
+def edit_requirement_request_form(request: Request, requirement_id: int):
+    user = require_user(request); db = connection()
+    requirement = db.execute("SELECT * FROM requirement_requests WHERE id=?", (requirement_id,)).fetchone()
+    db.close()
+    if not requirement:
+        raise HTTPException(404)
+    if not can_edit_requirement(user, requirement):
+        raise HTTPException(403, "只有需求提交人可以修改该需求")
+    return page(request, "request_form.html", cadence=requirement_review_cadence(), requirement=requirement, editing=True, requirement_status_label=requirement_status_label)
+
+
+@app.post("/requests/{requirement_id}/edit")
+def edit_requirement_request(
+    request: Request,
+    requirement_id: int,
+    title: str = Form(),
+    category: str = Form("feature"),
+    description: str = Form(),
+    expected_value: str = Form(""),
+):
+    user = require_user(request)
+    allowed_categories = {"feature", "workflow", "ui", "knowledge", "other"}
+    db = connection()
+    requirement = db.execute("SELECT * FROM requirement_requests WHERE id=?", (requirement_id,)).fetchone()
+    if not requirement:
+        db.close(); raise HTTPException(404)
+    if not can_edit_requirement(user, requirement):
+        db.close(); raise HTTPException(403, "只有需求提交人可以修改该需求")
+    normalized = {
+        "title": title.strip(),
+        "category": category if category in allowed_categories else "other",
+        "description": description.strip(),
+        "expected_value": expected_value.strip(),
+    }
+    if not normalized["title"] or not normalized["description"]:
+        db.close()
+        return page(
+            request, "request_form.html", cadence=requirement_review_cadence(), requirement={**dict(requirement), **normalized},
+            editing=True, requirement_status_label=requirement_status_label, error="请填写需求标题和详细说明。",
+        )
+    create_requirement_revision(
+        db, requirement, user["id"], normalized["title"], normalized["category"],
+        normalized["description"], normalized["expected_value"], "提交人修改，等待重新评审",
+    )
+    db.execute(
+        """UPDATE requirement_requests SET title=?,category=?,description=?,expected_value=?,status='pending',updated_at=CURRENT_TIMESTAMP
+        WHERE id=?""",
+        (normalized["title"], normalized["category"], normalized["description"], normalized["expected_value"], requirement_id),
+    )
+    db.commit(); db.close()
+    return redirect(f"/requests/{requirement_id}")
 
 
 @app.post("/requests/{requirement_id}/review")
@@ -850,11 +1255,15 @@ def review_requirement_request(request: Request, requirement_id: int, status: st
     if status not in allowed_statuses:
         raise HTTPException(400, "无效的需求状态")
     db = connection()
-    requirement = db.execute("SELECT id FROM requirement_requests WHERE id=?", (requirement_id,)).fetchone()
+    requirement = db.execute("SELECT * FROM requirement_requests WHERE id=?", (requirement_id,)).fetchone()
     if not requirement:
         db.close(); raise HTTPException(404)
+    revision = db.execute(
+        "SELECT id FROM requirement_revisions WHERE requirement_id=? ORDER BY revision_number DESC LIMIT 1",
+        (requirement_id,),
+    ).fetchone()
     db.execute("UPDATE requirement_requests SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (status, requirement_id))
-    db.execute("INSERT INTO requirement_review_events (requirement_id,status,note,reviewed_by) VALUES (?,?,?,?)", (requirement_id, status, note.strip(), user["id"]))
+    db.execute("INSERT INTO requirement_review_events (requirement_id,status,note,reviewed_by,revision_id) VALUES (?,?,?,?,?)", (requirement_id, status, note.strip(), user["id"], revision["id"] if revision else None))
     db.commit(); db.close()
     return redirect(f"/requests/{requirement_id}")
 
@@ -1055,6 +1464,62 @@ def model_settings(request: Request):
     active = active_llm_profile()
     profiles = [{key: value for key, value in item.items() if key != "api_key_env"} | {"configured": bool(os.getenv(item["api_key_env"], ""))} for item in llm_profiles()]
     return page(request, "model_settings.html", profiles=profiles, active_id=active["id"])
+
+
+def require_admin(request: Request):
+    user = require_user(request)
+    if not has_role(user, "admin"):
+        raise HTTPException(403, "只有管理员可以访问应用管理")
+    return user
+
+
+@app.get("/admin")
+def admin_dashboard(request: Request):
+    actor = require_admin(request)
+    db = connection()
+    users = db.execute(
+        """SELECT id,username,display_name,email,role,auth_provider,last_login_at,created_at,external_subject
+        FROM users ORDER BY CASE role WHEN 'admin' THEN 1 WHEN 'reviewer' THEN 2 ELSE 3 END, username"""
+    ).fetchall()
+    audit_events = db.execute(
+        """SELECT a.*,COALESCE(NULLIF(u.display_name,''),u.username,a.actor_username) AS actor_name
+        FROM audit_events a LEFT JOIN users u ON u.id=a.user_id
+        ORDER BY a.id DESC LIMIT 200"""
+    ).fetchall()
+    db.close()
+    return page(
+        request,
+        "admin.html",
+        users=users,
+        audit_events=audit_events,
+        super_admin_ids=sorted(configured_super_admin_employee_ids()),
+        can_manage_admins=is_super_admin_user(actor),
+    )
+
+
+@app.post("/admin/users/{user_id}/role")
+def admin_update_user_role(request: Request, user_id: int, role: str = Form()):
+    actor = require_admin(request)
+    if role not in VALID_ROLES:
+        raise HTTPException(400, "无效的人员权限")
+    db = connection()
+    target = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+    if not target:
+        db.close()
+        raise HTTPException(404, "人员不存在")
+    if target["id"] == actor["id"]:
+        db.close()
+        raise HTTPException(400, "不能在此处修改自己的权限")
+    if is_super_admin_user(target):
+        db.close()
+        raise HTTPException(403, "最高管理员账号不能被其他管理员降权")
+    if role == "admin" and not is_super_admin_user(actor):
+        db.close()
+        raise HTTPException(403, "只有最高管理员可以设置新的管理员")
+    db.execute("UPDATE users SET role=? WHERE id=?", (role, user_id))
+    db.commit()
+    db.close()
+    return redirect("/admin?notice=permission_saved")
 
 
 @app.post("/settings/models")
@@ -1566,7 +2031,7 @@ def new_tool_form(request: Request):
 
 
 @app.post("/tools")
-def create_tool(request: Request, name: str = Form(), short_description: str = Form(), details: str = Form(), version: str = Form(), release_notes: str = Form(), package: UploadFile = File(), logo: Optional[UploadFile] = File(None)):
+def create_tool(request: Request, name: str = Form(), short_description: str = Form(), details: str = Form(), version: str = Form(), release_notes: str = Form(""), package: UploadFile = File(), logo: Optional[UploadFile] = File(None)):
     user = require_user(request)
     if not all([name.strip(), short_description.strip(), details.strip(), version.strip(), package.filename]): return page(request, "tool_form.html", tool=None, error="名称、简介、说明、版本和工具文件均为必填。")
     package_path, package_name = save_upload(package, "tools"); logo_path = None
@@ -1605,6 +2070,35 @@ def edit_tool(request: Request, tool_id: int, name: str = Form(), short_descript
     if logo and logo.filename: logo_path = str(save_upload(logo, "logos")[0])
     db.execute("UPDATE tools SET name=?,short_description=?,details=?,logo_path=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (name.strip(), short_description.strip(), details.strip(), logo_path, tool_id)); db.commit(); db.close()
     return redirect(f"/tools/{tool_id}")
+
+
+@app.post("/tools/{tool_id}/delete")
+def delete_tool(request: Request, tool_id: int):
+    user = require_user(request)
+    if not has_role(user, "admin"):
+        raise HTTPException(403, "只有管理员可以删除工具")
+    db = connection(); tool = get_tool(db, tool_id)
+    if not tool:
+        db.close(); raise HTTPException(404)
+    versions = db.execute("SELECT id,file_path FROM tool_versions WHERE tool_id=?", (tool_id,)).fetchall()
+    file_paths = [row["file_path"] for row in versions]
+    if tool["logo_path"]:
+        file_paths.append(tool["logo_path"])
+    try:
+        version_ids = [row["id"] for row in versions]
+        if version_ids:
+            placeholders = ",".join("?" for _ in version_ids)
+            db.execute(f"DELETE FROM downloads WHERE tool_version_id IN ({placeholders})", version_ids)
+        db.execute("DELETE FROM feedback WHERE tool_id=?", (tool_id,))
+        db.execute("DELETE FROM tool_versions WHERE tool_id=?", (tool_id,))
+        db.execute("DELETE FROM tools WHERE id=?", (tool_id,))
+        db.commit()
+    except Exception:
+        db.rollback(); db.close(); raise
+    db.close()
+    for file_path in file_paths:
+        remove_uploaded_file(file_path)
+    return redirect("/tools")
 
 
 @app.post("/tools/{tool_id}/versions")

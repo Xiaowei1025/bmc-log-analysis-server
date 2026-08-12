@@ -1,0 +1,7 @@
+{
+  "server_url": "https://bmc.internal.example",
+  "token": "paste-once-and-store-outside-git",
+  "poll_seconds": 10,
+  "cli_path": "C:\\Program Files\\WeLink\\welink-cli.exe",
+  "dry_run": true
+}

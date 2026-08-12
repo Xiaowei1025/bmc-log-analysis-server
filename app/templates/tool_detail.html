@@ -20,9 +20,17 @@
           <span>作者：{{ tool.username }}</span>
           <span>首次发布：{{ tool.created_at }}</span>
         </div>
-        {% if user and user.id == tool.created_by %}
-        <a class="button tool-secondary-action" href="/tools/{{ tool.id }}/edit">修改介绍</a>
-        {% endif %}
+        <div class="hero-actions">
+          {% if user and user.id == tool.created_by %}
+          <a class="button tool-secondary-action" href="/tools/{{ tool.id }}/edit">修改介绍</a>
+          {% endif %}
+          {% if user and user.role == 'admin' %}
+          <form method="post" action="/tools/{{ tool.id }}/delete" data-confirm="确认删除工具“{{ tool.name }}”？工具版本、下载记录、反馈和服务器附件都会删除，且无法恢复。" data-confirm-title="删除内部工具" data-confirm-action="删除工具" data-pending-label="删除中…">
+            {{ csrf_input(request) }}
+            <button class="button danger" type="submit">删除工具</button>
+          </form>
+          {% endif %}
+        </div>
       </div>
     </div>
     <aside class="tool-overview" aria-label="工具概览">
@@ -39,7 +47,7 @@
           <div><p class="eyebrow">使用说明</p><h2>工具说明</h2></div>
           <span class="tool-section-icon" aria-hidden="true">i</span>
         </div>
-        <p class="multiline tool-description">{{ tool.details }}</p>
+        <div class="tool-description markdown-output" data-markdown>{{ tool.details }}</div>
       </section>
 
       <section class="tool-surface tool-version-panel">
@@ -120,4 +128,10 @@
     </aside>
   </div>
 </div>
+<script>
+  (() => {
+    const description = document.querySelector('.tool-description[data-markdown]');
+    if (description && window.BmcMarkdown) window.BmcMarkdown.renderTo(description, description.textContent || '');
+  })();
+</script>
 {% endblock %}
